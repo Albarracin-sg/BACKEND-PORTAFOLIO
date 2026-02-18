@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum SectionType {
+  HERO
+  ABOUT
+  PROJECTS
+  CONTACT
+  STATS
+}
+
+enum MessageStatus {
+  RECEIVED
+  SENT
+  FAILED
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  role      Role      @default(ADMIN)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  sessions  Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Page {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  isPublished Boolean   @default(true)
+  sections    Section[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Section {
+  id        String      @id @default(cuid())
+  pageId    String
+  page      Page        @relation(fields: [pageId], references: [id])
+  type      SectionType
+  order     Int
+  content   Json
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Project {
+  id           String               @id @default(cuid())
+  title        String
+  description  String
+  problem      String
+  challenge    String
+  solution     String
+  imageUrl     String
+  githubUrl    String
+  liveUrl      String?
+  category     String
+  status       String
+  featured     Boolean              @default(false)
+  stars        Int                  @default(0)
+  forks        Int                  @default(0)
+  views        Int                  @default(0)
+  date         DateTime
+  technologies ProjectTechnology[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+}
+
+model Technology {
+  id       String               @id @default(cuid())
+  name     String               @unique
+  projects ProjectTechnology[]
+}
+
+model ProjectTechnology {
+  projectId    String
+  technologyId String
+  project      Project    @relation(fields: [projectId], references: [id])
+  technology   Technology @relation(fields: [technologyId], references: [id])
+
+  @@id([projectId, technologyId])
+}
+
+model Translation {
+  id        String   @id @default(cuid())
+  lang      String
+  namespace String
+  content   Json
+  updatedAt DateTime @updatedAt
+
+  @@unique([lang, namespace])
+}
+
+model ContactMessage {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  message   String
+  status    MessageStatus @default(RECEIVED)
+  createdAt DateTime      @default(now())
+}
+
+model GitHubRepoCache {
+  id        String   @id @default(cuid())
+  owner     String
+  name      String
+  data      Json
+  etag      String?
+  fetchedAt DateTime
+  ttlSec    Int
+
+  @@unique([owner, name])
+}
+
+model GitHubSummaryCache {
+  id        String   @id @default(cuid())
+  data      Json
+  etag      String?
+  fetchedAt DateTime
+  ttlSec    Int
+}
+
+model Persona {
+  id        String     @id @default(cuid())
+  name      String
+  prompt    String
+  model     String
+  settings  Json
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  threads   AIThread[]
+}
+
+model AIThread {
+  id        String      @id @default(cuid())
+  personaId String
+  persona   Persona     @relation(fields: [personaId], references: [id])
+  title     String?
+  createdAt DateTime    @default(now())
+  messages  AIMessage[]
+}
+
+model AIMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  thread    AIThread @relation(fields: [threadId], references: [id])
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
