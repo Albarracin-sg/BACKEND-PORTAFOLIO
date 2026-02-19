@@ -10,7 +10,7 @@ export class UpsertTranslationDto {
   @IsString()
   namespace: string;
 
-  @ApiProperty({ type: 'object' })
+  @ApiProperty({ type: 'object', additionalProperties: true })
   @IsDefined()
   content: Record<string, unknown>;
 }

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { UpsertTranslationDto } from './dto/upsert-translation.dto';
 
 @Injectable()
@@ -16,8 +17,12 @@ export class TranslationsService {
   async upsertTranslation(data: UpsertTranslationDto) {
     return this.prisma.translation.upsert({
       where: { lang_namespace: { lang: data.lang, namespace: data.namespace } },
-      update: { content: data.content },
-      create: data,
+      update: { content: data.content as Prisma.InputJsonValue },
+      create: {
+        lang: data.lang,
+        namespace: data.namespace,
+        content: data.content as Prisma.InputJsonValue,
+      },
     });
   }
 }

@@ -16,7 +16,7 @@ export class CreateSectionDto {
   @Min(0)
   order: number;
 
-  @ApiProperty({ type: 'object' })
+  @ApiProperty({ type: 'object', additionalProperties: true })
   @IsDefined()
   content: Record<string, unknown>;
 }
