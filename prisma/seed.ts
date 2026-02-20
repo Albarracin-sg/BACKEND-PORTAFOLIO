@@ -15,18 +15,20 @@ const translations = {
       downloadCV: 'Descargar CV',
     },
     hero: {
-      greeting: 'Hola, soy Juan Perez',
-      role: 'Fullstack Developer (Nest.js + React)',
-      subtitle: 'Creo aplicaciones web modernas y escalables con las ultimas tecnologias.',
+      greeting: 'Hola, soy Juan Camilo Albarracin',
+      role: 'Backend Engineer | Microservices & AI Systems',
+      subtitle:
+        'Construyo backends escalables con Arquitectura Limpia, DDD y microservicios. Integro agentes MCP y modelos de IA para soluciones reales en entornos academicos y empresariales.',
       viewProjects: 'Ver proyectos',
       contactMe: 'Contactarme',
-      yearsExperience: 'Anios de experiencia',
+      yearsExperience: 'Anos de experiencia',
       projectsCompleted: 'Proyectos completados',
       technologies: 'Tecnologias',
     },
     about: {
       title: 'Sobre mi',
-      bio: 'Soy un desarrollador fullstack apasionado por crear soluciones digitales innovadoras.',
+      bio:
+        'Ingeniero de software enfocado en backend. Trabajo con Arquitectura Limpia (Hexagonal), DDD y microservicios para construir soluciones mantenibles. Experiencia en C# y Node.js, integrando agentes MCP y modelos de IA. Actualmente realizo practicas profesionales en una universidad en Colombia.',
       technicalSkills: 'Habilidades Tecnicas',
       softSkillsTitle: 'Habilidades Blandas',
       softSkills: {
@@ -40,19 +42,22 @@ const translations = {
       experienceEducation: 'Experiencia y Educacion',
       timeline: {
         work1: {
-          title: 'Senior Fullstack Developer',
-          company: 'Tech Solutions Inc.',
-          description: 'Desarrollo de aplicaciones web escalables con React, Node.js y PostgreSQL.',
+          title: 'Backend Developer Intern',
+          company: 'Universidad en Colombia',
+          description:
+            'Desarrollo de microservicios con Node.js y C#, implementacion de autenticacion JWT con control de roles (RBAC) y construccion de bots academicos con MCP e integracion de modelos de IA.',
         },
         work2: {
-          title: 'Frontend Developer',
-          company: 'Digital Agency Madrid',
-          description: 'Creacion de interfaces modernas y responsivas con React y TypeScript.',
+          title: 'SaaS en construccion: Goodgate',
+          company: 'Proyecto personal',
+          description:
+            'Aplicacion de gestion de proveedores con enfoque SaaS. Back-end en Node.js/TypeScript y arquitectura modular para escalar cuando salga al mercado.',
         },
         education1: {
-          title: 'Ingenieria Informatica',
-          institution: 'Universidad Politecnica de Madrid',
-          description: 'Grado en Ingenieria Informatica con especializacion en desarrollo de software.',
+          title: 'Ingenieria de Software',
+          institution: 'Universidad en Colombia',
+          description:
+            'Formacion en arquitectura de software, bases de datos relacionales, patrones de diseno y desarrollo backend.',
         },
       },
     },
@@ -112,7 +117,7 @@ const translations = {
     },
     contact: {
       title: 'Contacto',
-      subtitle: 'Tienes un proyecto en mente? Me encantaria conocer mas.',
+      subtitle: 'Interesado en trabajar conmigo o colaborar en un proyecto?',
       form: {
         title: 'Enviame un mensaje',
         name: 'Nombre',
@@ -133,8 +138,8 @@ const translations = {
       social: { title: 'Sigueme' },
     },
     stats: {
-      title: 'Estadisticas',
-      subtitle: 'Metricas y datos sobre mi actividad como desarrollador.',
+      title: 'Estadisticas Tecnicas',
+      subtitle: 'Indicadores reales de experiencia tecnica',
       totalProjects: 'Proyectos Totales',
       projectsDescription: 'Proyectos completados exitosamente',
       githubCommits: 'Commits en GitHub',
@@ -162,9 +167,10 @@ const translations = {
       downloadCV: 'Download CV',
     },
     hero: {
-      greeting: "Hello, I'm Juan Perez",
-      role: 'Fullstack Developer (Nest.js + React)',
-      subtitle: 'I create modern and scalable web applications with cutting-edge technologies.',
+      greeting: "Hello, I'm Juan Camilo Albarracin",
+      role: 'Backend Engineer | Microservices & AI Systems',
+      subtitle:
+        'I build scalable backends with Clean Architecture, DDD and microservices. I integrate MCP-based agents and AI models for real academic and enterprise use cases.',
       viewProjects: 'View projects',
       contactMe: 'Contact me',
       yearsExperience: 'Years of experience',
@@ -173,7 +179,8 @@ const translations = {
     },
     about: {
       title: 'About Me',
-      bio: "I'm a fullstack developer passionate about creating innovative digital solutions.",
+      bio:
+        'Backend-focused software engineer. I work with Clean Architecture (Hexagonal), DDD and microservices to build maintainable systems. Experience with C# and Node.js, integrating MCP-based agents and AI models. Currently a software engineering intern in Colombia.',
       technicalSkills: 'Technical Skills',
       softSkillsTitle: 'Soft Skills',
       softSkills: {
@@ -187,19 +194,22 @@ const translations = {
       experienceEducation: 'Experience & Education',
       timeline: {
         work1: {
-          title: 'Senior Fullstack Developer',
-          company: 'Tech Solutions Inc.',
-          description: 'Development of scalable web applications using React, Node.js and PostgreSQL.',
+          title: 'Backend Developer Intern',
+          company: 'University in Colombia',
+          description:
+            'Microservices development with Node.js and C#, JWT authentication with role-based access control (RBAC), and academic bot building using MCP with AI model integration.',
         },
         work2: {
-          title: 'Frontend Developer',
-          company: 'Digital Agency Madrid',
-          description: 'Creation of modern and responsive user interfaces with React and TypeScript.',
+          title: 'SaaS in progress: Goodgate',
+          company: 'Personal project',
+          description:
+            'Supplier management SaaS application. Node.js/TypeScript backend and modular architecture for future scale.',
         },
         education1: {
-          title: 'Computer Engineering',
-          institution: 'Universidad Politecnica de Madrid',
-          description: 'Bachelor degree in Computer Engineering with specialization in software development.',
+          title: 'Software Engineering',
+          institution: 'University in Colombia',
+          description:
+            'Training in software architecture, relational databases, design patterns, and backend development.',
         },
       },
     },
@@ -259,7 +269,7 @@ const translations = {
     },
     contact: {
       title: 'Contact',
-      subtitle: 'Have a project in mind? I would love to hear more.',
+      subtitle: 'Interested in working together or collaborating?',
       form: {
         title: 'Send me a message',
         name: 'Name',
@@ -280,8 +290,8 @@ const translations = {
       social: { title: 'Follow me' },
     },
     stats: {
-      title: 'Statistics',
-      subtitle: 'Metrics and data about my activity as a developer.',
+      title: 'Technical Statistics',
+      subtitle: 'Real technical experience indicators',
       totalProjects: 'Total Projects',
       projectsDescription: 'Projects completed successfully',
       githubCommits: 'GitHub Commits',
@@ -301,30 +311,47 @@ const translations = {
 } as const;
 
 const technicalSkills = [
-  'React',
+  'C#',
+  '.NET',
   'Node.js',
   'TypeScript',
-  'Nest.js',
+  'JavaScript',
+  'Python',
+  'Express',
+  'Prisma',
+  'Entity Framework Core',
   'PostgreSQL',
-  'MongoDB',
+  'MariaDB',
+  'SQL',
   'Docker',
-  'AWS',
   'Git',
-  'GraphQL',
+  'GitFlow',
+  'JWT Authentication',
+  'Clean Architecture (Hexagonal)',
+  'DDD',
+  'CQRS',
+  'Microservices',
+  'MCP (Model Context Protocol)',
+  'AI Agent Orchestration',
+  'OpenAI & Anthropic SDKs',
   'Jest',
-  'Tailwind CSS',
+  'CI/CD (Jenkins)',
+  'Railway',
+  'React (Vite)',
+  'CORS',
 ];
 
 const contactInfo = [
-  { label: 'Email', value: 'hello@developer.com', link: 'mailto:hello@developer.com' },
-  { label: 'Phone', value: '+34 123 456 789', link: 'tel:+34123456789' },
-  { label: 'Location', value: 'Madrid, Espana', link: null },
+  {
+    label: 'Email',
+    value: 'albarrajuan5@gmail.com',
+    link: 'mailto:albarrajuan5@gmail.com',
+  },
+  { label: 'Location', value: 'Bogota, Colombia', link: null },
 ];
 
 const socialLinks = [
-  { label: 'GitHub', link: 'https://github.com', color: 'gray' },
-  { label: 'LinkedIn', link: 'https://linkedin.com', color: 'blue' },
-  { label: 'Email', link: 'mailto:hello@developer.com', color: 'red' },
+  { label: 'GitHub', link: 'https://github.com/Albarracin-sg', color: 'gray' },
 ];
 
 async function seedTranslations() {
@@ -371,9 +398,9 @@ async function seedPages() {
     secondaryImage:
       'https://images.unsplash.com/photo-1737574107736-9e02ca5d5387?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBkZXZlbG9wZXIlMjBwb3J0cmFpdCUyMHNvZnR3YXJlJTIwZW5naW5lZXJ8ZW58MXx8fHwxNzU3MjIwOTUwfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
     stats: {
-      yearsExperience: '3+',
-      projectsCompleted: '15+',
-      technologies: '5+',
+      yearsExperience: '1+',
+      projectsCompleted: '10+',
+      technologies: '18+',
     },
     cta: {
       viewProjects: translations.es.hero.viewProjects,
@@ -391,24 +418,24 @@ async function seedPages() {
         type: 'work',
         title: translations.es.about.timeline.work1.title,
         company: translations.es.about.timeline.work1.company,
-        period: '2022 - Present',
-        location: 'Remote',
+        period: '2024 - Present',
+        location: 'Bogota, Colombia',
         description: translations.es.about.timeline.work1.description,
       },
       {
         type: 'work',
         title: translations.es.about.timeline.work2.title,
         company: translations.es.about.timeline.work2.company,
-        period: '2021 - 2022',
-        location: 'Madrid, Espana',
+        period: '2024 - Present',
+        location: 'Bogota, Colombia',
         description: translations.es.about.timeline.work2.description,
       },
       {
         type: 'education',
         title: translations.es.about.timeline.education1.title,
         company: translations.es.about.timeline.education1.institution,
-        period: '2018 - 2022',
-        location: 'Madrid, Espana',
+        period: 'En curso',
+        location: 'Colombia',
         description: translations.es.about.timeline.education1.description,
       },
     ],
@@ -433,24 +460,24 @@ async function seedPages() {
     subtitle: translations.es.stats.subtitle,
     cards: [
       {
-        title: translations.es.stats.totalProjects,
-        value: '25+',
-        description: translations.es.stats.projectsDescription,
+        title: 'Microservices Built',
+        value: '8+',
+        description: 'Servicios backend desarrollados y desplegados',
       },
       {
-        title: translations.es.stats.githubCommits,
-        value: '1,240',
-        description: translations.es.stats.commitsDescription,
+        title: 'AI Agents Designed',
+        value: '5+',
+        description: 'Agentes MCP implementados',
       },
       {
-        title: translations.es.stats.openSource,
-        value: '8',
-        description: translations.es.stats.openSourceDescription,
+        title: 'Authentication Systems',
+        value: '6+',
+        description: 'Implementaciones JWT con control de roles',
       },
       {
-        title: translations.es.stats.collaborations,
-        value: '12',
-        description: translations.es.stats.collaborationsDescription,
+        title: 'Projects Delivered',
+        value: '10+',
+        description: 'Proyectos academicos y profesionales',
       },
     ],
     charts: {
