@@ -620,7 +620,6 @@ async function seedAdminUser() {
 async function main() {
   await seedTranslations();
   await seedPages();
-  await seedSampleProject();
   await seedAdminUser();
 }
 

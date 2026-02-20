@@ -9,6 +9,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { TranslationsModule } from './modules/translations/translations.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { MediaModule } from './modules/media/media.module';
+import { GithubModule } from './modules/github/github.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 @Module({
@@ -21,6 +22,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
     TranslationsModule,
     ContactModule,
     MediaModule,
+    GithubModule,
   ],
   controllers: [AppController],
   providers: [AppService],

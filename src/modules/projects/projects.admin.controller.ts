@@ -26,6 +26,11 @@ export class ProjectsAdminController {
     return this.projectsService.createProject(body);
   }
 
+  @Post('github-sync')
+  syncGithubProjects() {
+    return this.projectsService.syncGithubProjects();
+  }
+
   @Put(':id')
   updateProject(@Param('id') id: string, @Body() body: UpdateProjectDto) {
     return this.projectsService.updateProject(id, body);

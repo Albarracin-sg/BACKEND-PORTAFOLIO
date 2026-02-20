@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { GithubService } from '../github/github.service';
 
 interface ProjectQuery {
   search?: string;
@@ -14,12 +14,15 @@ interface ProjectQuery {
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly githubService: GithubService,
+  ) {}
 
   async listPublicProjects(query: ProjectQuery) {
     const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
 
-    const orderBy: Prisma.ProjectOrderByWithRelationInput =
+    const orderBy =
       sortBy === 'name'
         ? { title: sortOrder }
         : sortBy === 'stars'
@@ -61,6 +64,82 @@ export class ProjectsService {
       include: { technologies: { include: { technology: true } } },
       orderBy,
     });
+  }
+
+  async syncGithubProjects() {
+    const repos = await this.githubService.listRepos();
+    const sortedByStars = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count);
+    const featuredIds = new Set(sortedByStars.slice(0, 3).map((repo) => repo.id));
+    const repoUrls = repos.map((repo) => repo.html_url);
+
+    let created = 0;
+    let updated = 0;
+
+    if (repoUrls.length > 0) {
+      await this.prisma.project.deleteMany({
+        where: { githubUrl: { notIn: repoUrls } },
+      });
+    }
+
+    for (const repo of repos) {
+      const existing = await this.prisma.project.findFirst({
+        where: { githubUrl: repo.html_url },
+        include: { technologies: { include: { technology: true } } },
+      });
+
+      if (!existing) {
+        const technologies = [repo.language, ...(repo.topics ?? [])]
+          .filter((value): value is string => Boolean(value))
+          .map((name) => ({
+            technology: {
+              connectOrCreate: {
+                where: { name },
+                create: { name },
+              },
+            },
+          }));
+
+        await this.prisma.project.create({
+          data: {
+            title: repo.name,
+            description: repo.description ?? 'Repositorio publico en GitHub',
+            problem: '',
+            challenge: '',
+            solution: '',
+            imageUrl: `https://opengraph.githubassets.com/1/${repo.owner.login}/${repo.name}`,
+            githubUrl: repo.html_url,
+            liveUrl: repo.homepage || null,
+            category: 'web',
+            status: repo.archived ? 'prototype' : 'production',
+            featured: featuredIds.has(repo.id),
+            stars: repo.stargazers_count ?? 0,
+            forks: repo.forks_count ?? 0,
+            views: 0,
+            date: new Date(repo.pushed_at ?? repo.updated_at),
+            technologies: technologies.length > 0 ? { create: technologies } : undefined,
+          },
+        });
+        created += 1;
+        continue;
+      }
+
+      await this.prisma.project.update({
+        where: { id: existing.id },
+        data: {
+          stars: repo.stargazers_count ?? existing.stars,
+          forks: repo.forks_count ?? existing.forks,
+          date: new Date(repo.pushed_at ?? repo.updated_at),
+          liveUrl: repo.homepage || existing.liveUrl,
+        },
+      });
+      updated += 1;
+    }
+
+    return { total: repos.length, created, updated };
+  }
+
+  private async loadGithubProjects() {
+    return [];
   }
 
   async getProject(id: string) {
