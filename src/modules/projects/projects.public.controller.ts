@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 
@@ -8,6 +8,7 @@ export class ProjectsPublicController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
+  @Header('Cache-Control', 'no-store')
   listProjects(
     @Query('search') search?: string,
     @Query('category') category?: string,
@@ -19,6 +20,7 @@ export class ProjectsPublicController {
   }
 
   @Get(':id')
+  @Header('Cache-Control', 'no-store')
   getProject(@Param('id') id: string) {
     return this.projectsService.getProject(id);
   }

@@ -170,3 +170,13 @@ model AIMessage {
   content   String
   createdAt DateTime @default(now())
 }
+
+model Media {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  createdAt    DateTime @default(now())
+}

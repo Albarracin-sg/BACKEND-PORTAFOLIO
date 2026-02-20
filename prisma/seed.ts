@@ -366,6 +366,10 @@ async function seedPages() {
     greeting: translations.es.hero.greeting,
     role: translations.es.hero.role,
     subtitle: translations.es.hero.subtitle,
+    primaryImage:
+      'https://images.unsplash.com/photo-1666875758376-25755544ba8d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkZXZlbG9wZXIlMjBpbGx1c3RyYXRpb24lMjBjYXJ0b29uJTIwcGVyc29uJTIwY29kaW5nfGVufDF8fHx8MTc1NzIyMDk0N3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+    secondaryImage:
+      'https://images.unsplash.com/photo-1737574107736-9e02ca5d5387?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBkZXZlbG9wZXIlMjBwb3J0cmFpdCUyMHNvZnR3YXJlJTIwZW5naW5lZXJ8ZW58MXx8fHwxNzU3MjIwOTUwfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
     stats: {
       yearsExperience: '3+',
       projectsCompleted: '15+',

@@ -1,4 +1,4 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Header, Param } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ContentService } from './content.service';
 
@@ -8,6 +8,7 @@ export class ContentPublicController {
   constructor(private readonly contentService: ContentService) {}
 
   @Get(':slug')
+  @Header('Cache-Control', 'no-store')
   getPageBySlug(@Param('slug') slug: string) {
     return this.contentService.getPublishedPageBySlug(slug);
   }
