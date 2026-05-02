@@ -8,6 +8,7 @@ WORKDIR /app
 # Stage 2: Dependencies
 FROM base AS dependencies
 COPY package.json pnpm-lock.yaml ./
+COPY prisma ./prisma/
 RUN pnpm install --frozen-lockfile
 
 # Stage 3: Builder
