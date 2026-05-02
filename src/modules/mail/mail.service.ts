@@ -30,7 +30,7 @@ export class MailService {
         attachments: [
           {
             filename: 'logo.png',
-            path: '/home/guayaba/TRABAJO/personal/portafolio/BACKEND-PORTAFOLIO/src/modules/mail/assets/logo.png',
+            path: join(process.cwd(), 'src/modules/mail/assets/logo.png'),
             cid: 'logo',
           },
         ],
@@ -59,7 +59,7 @@ export class MailService {
         attachments: [
           {
             filename: 'logo.png',
-            path: '/home/guayaba/TRABAJO/personal/portafolio/BACKEND-PORTAFOLIO/src/modules/mail/assets/logo.png',
+            path: join(process.cwd(), 'src/modules/mail/assets/logo.png'),
             cid: 'logo',
           },
         ],
