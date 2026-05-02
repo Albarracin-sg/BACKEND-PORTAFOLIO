@@ -8,6 +8,7 @@ on:
       - 'infra/**'
       - 'ops/**'
       - 'prisma/**'
+      - 'test/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/**'

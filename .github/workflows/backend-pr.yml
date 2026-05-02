@@ -8,6 +8,7 @@ on:
       - 'infra/**'
       - 'ops/**'
       - 'prisma/**'
+      - 'test/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
 
@@ -33,4 +34,3 @@ jobs:
             - [ ] **Infra:** Si tocaste `infra/` o `ops/`, ¿lo probaste localmente con Docker?
 
             > *Recorda: En este repo no usamos Branch Protection paga. La disciplina es visual: NO mergear si hay algo en rojo.*
-
