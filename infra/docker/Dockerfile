@@ -17,7 +17,7 @@ COPY . .
 COPY --from=dependencies /app/node_modules ./node_modules
 RUN pnpm prisma:generate
 RUN pnpm build
-RUN pnpm prune --prod
+RUN pnpm prune --prod --ignore-scripts
 
 # Stage 4: Production
 FROM node:22-alpine AS runner
