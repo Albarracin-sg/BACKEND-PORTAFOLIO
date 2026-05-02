@@ -4,14 +4,14 @@ import request from 'supertest';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication;
-  let AppModule: typeof import('../src/app.module').AppModule;
+  let AppModule: unknown;
 
   beforeAll(async () => {
     process.env.SPOTIFY_CLIENT_ID ??= 'test-spotify-client-id';
     process.env.SPOTIFY_CLIENT_SECRET ??= 'test-spotify-client-secret';
     process.env.SPOTIFY_REFRESH_TOKEN ??= 'test-spotify-refresh-token';
 
-    ({ AppModule } = await import('../src/app.module'));
+    ({ AppModule } = require('../src/app.module'));
   });
 
   beforeEach(async () => {
