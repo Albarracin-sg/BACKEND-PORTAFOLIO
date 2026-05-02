@@ -29,6 +29,11 @@ export const envSchema = z.object({
   GITHUB_TOKEN: z.string(),
   GITHUB_CACHE_TTL_MINUTES: z.coerce.number().default(30),
 
+  // Spotify Integration
+  SPOTIFY_CLIENT_ID: z.string(),
+  SPOTIFY_CLIENT_SECRET: z.string(),
+  SPOTIFY_REFRESH_TOKEN: z.string(),
+
   // Initial Admin User (for seeding)
   ADMIN_EMAIL: z.string().email(),
   ADMIN_PASSWORD: z.string().min(6),

@@ -10,6 +10,7 @@ import { ContactModule } from './modules/contact/contact.module';
 import { MediaModule } from './modules/media/media.module';
 import { GithubModule } from './modules/github/github.module';
 import { MailModule } from './modules/mail/mail.module';
+import { SpotifyModule } from './modules/spotify/spotify.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 import { validateEnv } from './config/env.schema';
@@ -27,6 +28,7 @@ import { validateEnv } from './config/env.schema';
     ContactModule,
     MediaModule,
     GithubModule,
+    SpotifyModule,
     MailModule,
   ],
   controllers: [AppController],
