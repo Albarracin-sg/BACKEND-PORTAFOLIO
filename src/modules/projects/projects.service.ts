@@ -22,6 +22,8 @@ export class ProjectsService {
   async listPublicProjects(query: ProjectQuery) {
     const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
 
+    await this.syncGithubProjects().catch(() => null);
+
     const orderBy =
       sortBy === 'name'
         ? { title: sortOrder }
@@ -126,6 +128,9 @@ export class ProjectsService {
       await this.prisma.project.update({
         where: { id: existing.id },
         data: {
+          imageUrl:
+            existing.imageUrl ||
+            `https://opengraph.githubassets.com/1/${repo.owner.login}/${repo.name}`,
           stars: repo.stargazers_count ?? existing.stars,
           forks: repo.forks_count ?? existing.forks,
           date: new Date(repo.pushed_at ?? repo.updated_at),
@@ -136,10 +141,6 @@ export class ProjectsService {
     }
 
     return { total: repos.length, created, updated };
-  }
-
-  private async loadGithubProjects() {
-    return [];
   }
 
   async getProject(id: string) {
