@@ -11,31 +11,40 @@ export class ContactService {
   ) {}
 
   async createMessage(data: CreateContactDto) {
+    let attemptData = {
+      name: data.name,
+      email: data.email,
+      company: data.company,
+      subject: data.subject,
+      message: data.message,
+    };
+
     let message;
-    try {
-      message = await this.prisma.contactMessage.create({
-        data: {
-          name: data.name,
-          email: data.email,
-          company: data.company,
-          subject: data.subject,
-          message: data.message,
-        },
-      });
-    } catch (error) {
-      // Si el error es que la columna 'company' no existe, intentamos sin ella
-      if (error.message && error.message.includes('column `company` does not exist')) {
-        console.warn('⚠️ Column "company" missing in DB, retrying without it...');
+    let success = false;
+    let retries = 3;
+
+    while (!success && retries > 0) {
+      try {
         message = await this.prisma.contactMessage.create({
-          data: {
-            name: data.name,
-            email: data.email,
-            subject: data.subject,
-            message: data.message,
-          },
+          data: attemptData,
         });
-      } else {
-        throw error;
+        success = true;
+      } catch (error) {
+        retries--;
+        // Si el error es que una columna no existe, la eliminamos de los datos e intentamos de nuevo
+        const missingColumnMatch = error.message && error.message.match(/column `([^`]+)` does not exist/);
+        
+        if (missingColumnMatch) {
+          const colName = missingColumnMatch[1];
+          console.warn(`⚠️ Column "${colName}" missing in DB, removing from payload and retrying...`);
+          
+          // @ts-ignore
+          delete attemptData[colName];
+          
+          if (retries === 0) throw error;
+        } else {
+          throw error;
+        }
       }
     }
 
