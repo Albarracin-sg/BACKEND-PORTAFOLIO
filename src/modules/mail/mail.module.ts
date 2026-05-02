@@ -25,10 +25,10 @@ import { MailService } from './mail.service';
           from: `"Portfolio" <${config.get('MAIL_FROM')}>`,
         },
         template: {
-          dir: join(__dirname, 'templates'),
+          dir: join(__dirname, '..', '..', '..', 'modules', 'mail', 'templates'),
           adapter: new HandlebarsAdapter(),
           options: {
-            strict: true,
+            strict: false,
           },
         },
       }),
