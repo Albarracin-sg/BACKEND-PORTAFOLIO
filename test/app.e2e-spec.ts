@@ -4,7 +4,7 @@ import request from 'supertest';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication;
-  let AppModule: unknown;
+  let AppModule: any;
 
   beforeAll(async () => {
     process.env.SPOTIFY_CLIENT_ID ??= 'test-spotify-client-id';
