@@ -6,11 +6,12 @@
     "deleteOutDir": true,
     "assets": [
       {
-        "include": "src/modules/mail/templates/**/*",
-        "watchAssets": true
+        "include": "modules/mail/templates/**/*.hbs",
+        "watchAssets": true,
+        "flat": false
       },
       {
-        "include": "src/modules/mail/assets/**/*",
+        "include": "modules/mail/assets/**/*",
         "watchAssets": true
       }
     ]
