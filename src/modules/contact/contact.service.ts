@@ -11,15 +11,33 @@ export class ContactService {
   ) {}
 
   async createMessage(data: CreateContactDto) {
-    const message = await this.prisma.contactMessage.create({
-      data: {
-        name: data.name,
-        email: data.email,
-        company: data.company,
-        subject: data.subject,
-        message: data.message,
-      },
-    });
+    let message;
+    try {
+      message = await this.prisma.contactMessage.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          company: data.company,
+          subject: data.subject,
+          message: data.message,
+        },
+      });
+    } catch (error) {
+      // Si el error es que la columna 'company' no existe, intentamos sin ella
+      if (error.message && error.message.includes('column `company` does not exist')) {
+        console.warn('⚠️ Column "company" missing in DB, retrying without it...');
+        message = await this.prisma.contactMessage.create({
+          data: {
+            name: data.name,
+            email: data.email,
+            subject: data.subject,
+            message: data.message,
+          },
+        });
+      } else {
+        throw error;
+      }
+    }
 
     // Enviar notificación por mail usando el nuevo servicio
     try {
