@@ -15,9 +15,8 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      // Nota: Si cambiaste el retorno de appService.getHello(), actualizá este test.
-      expect(appController.getHello()).toBeDefined();
+    it('should return health status', () => {
+      expect(appController.getHealth()).toBeDefined();
     });
   });
 });
