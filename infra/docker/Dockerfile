@@ -20,7 +20,6 @@ COPY package.json pnpm-lock.yaml ./
 COPY prisma ./prisma/
 COPY --from=dependencies /app/node_modules ./node_modules
 RUN pnpm prune --prod --ignore-scripts
-RUN pnpm prisma:generate
 
 FROM node:22-alpine AS runner
 WORKDIR /app
