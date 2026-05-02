@@ -102,16 +102,6 @@ model ProjectTechnology {
   @@id([projectId, technologyId])
 }
 
-model Translation {
-  id        String   @id @default(cuid())
-  lang      String
-  namespace String
-  content   Json
-  updatedAt DateTime @updatedAt
-
-  @@unique([lang, namespace])
-}
-
 model ContactMessage {
   id        String        @id @default(cuid())
   name      String

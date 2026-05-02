@@ -6,7 +6,6 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ContentModule } from './modules/content/content.module';
 import { ProjectsModule } from './modules/projects/projects.module';
-import { TranslationsModule } from './modules/translations/translations.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { MediaModule } from './modules/media/media.module';
 import { GithubModule } from './modules/github/github.module';
@@ -19,7 +18,6 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
     AuthModule,
     ContentModule,
     ProjectsModule,
-    TranslationsModule,
     ContactModule,
     MediaModule,
     GithubModule,
