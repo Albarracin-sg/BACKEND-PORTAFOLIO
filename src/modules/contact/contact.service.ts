@@ -49,19 +49,29 @@ export class ContactService {
     }
 
     // Enviar notificación por mail usando el nuevo servicio
+    let emailStatus: 'sent' | 'failed' = 'sent';
+    let emailError: any = null;
+    
     try {
       // Enviar al admin
       await this.mailService.sendContactEmail(data);
       // Enviar confirmación al usuario
       await this.mailService.sendConfirmationEmail(data);
     } catch (error) {
-      console.error('❌ ERROR ENVIANDO MAILS DE CONTACTO:', error);
-      if (error.response) {
-        console.error('Detalle del servidor de mail:', error.response);
-      }
+      emailStatus = 'failed';
+      emailError = {
+        message: error.message,
+        code: error.code,
+        response: error.response
+      };
+      console.error('❌ ERROR ENVIANDO MAILS DE CONTACTO:', emailError);
     }
 
-    return message;
+    return {
+      message,
+      emailStatus,
+      ...(emailError && { emailError })
+    };
   }
 
   async listMessages() {
