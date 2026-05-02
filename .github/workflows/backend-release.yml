@@ -10,10 +10,15 @@ on:
       - 'prisma/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/**'
 
 jobs:
+  verify:
+    uses: ./.github/workflows/_backend-verify.yml
+
   publish:
     runs-on: ubuntu-latest
+    needs: verify
     permissions:
       contents: read
       packages: write
