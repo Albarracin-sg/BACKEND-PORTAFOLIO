@@ -1,10 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from './../src/app.module';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication;
+  let AppModule: typeof import('../src/app.module').AppModule;
+
+  beforeAll(async () => {
+    process.env.SPOTIFY_CLIENT_ID ??= 'test-spotify-client-id';
+    process.env.SPOTIFY_CLIENT_SECRET ??= 'test-spotify-client-secret';
+    process.env.SPOTIFY_REFRESH_TOKEN ??= 'test-spotify-refresh-token';
+
+    ({ AppModule } = await import('../src/app.module'));
+  });
 
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
