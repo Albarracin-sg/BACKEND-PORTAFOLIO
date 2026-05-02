@@ -20,7 +20,7 @@ jobs:
     needs: verify
     steps:
       - name: Post Governance Comment
-        uses: mshick/add-pr-comment@v2
+        uses: mshick/add-pr-comment@v3
         with:
           message: |
             ## Contrato de Revision (Gobernanza Backend)
