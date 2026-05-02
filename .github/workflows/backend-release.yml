@@ -34,8 +34,17 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio_test?schema=public
       JWT_SECRET: test-secret-only-for-ci
       PORT: 3000
+      CORS_ORIGIN: http://localhost:3000
       ADMIN_EMAIL: admin@test.com
       ADMIN_PASSWORD: password
+      SMTP_HOST: smtp.test.com
+      SMTP_PORT: 587
+      SMTP_USER: test-user
+      SMTP_PASS: test-pass
+      MAIL_FROM: test@test.com
+      GITHUB_USERNAME: test-user
+      GITHUB_TOKEN: test-token
+      GITHUB_CACHE_TTL_MINUTES: 30
 
     steps:
       - name: Checkout code
