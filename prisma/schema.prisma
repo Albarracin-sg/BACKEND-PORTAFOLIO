@@ -106,6 +106,8 @@ model ContactMessage {
   id        String        @id @default(cuid())
   name      String
   email     String
+  company   String?
+  subject   String
   message   String
   status    MessageStatus @default(RECEIVED)
   createdAt DateTime      @default(now())

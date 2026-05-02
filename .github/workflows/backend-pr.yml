@@ -1,0 +1,36 @@
+name: Backend PR Governance
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'infra/**'
+      - 'ops/**'
+      - 'prisma/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+jobs:
+  verify:
+    uses: ./.github/workflows/_backend-verify.yml
+
+  governance:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - name: Post Governance Comment
+        uses: mshick/add-pr-comment@v2
+        with:
+          message: |
+            ## Contrato de Revision (Gobernanza Backend)
+
+            Hola! Gracias por tu aporte. Antes de mergear, asegurate de cumplir con:
+
+            - [ ] **Checks en Verde:** Los tests, lint y build pasaron en el CI.
+            - [ ] **Arquitectura:** ¿El cambio sigue el patrón de Monolito Modular?
+            - [ ] **Seguridad:** ¿Se validaron los inputs con DTOs/Zod? ¿Hay secrets expuestos?
+            - [ ] **Infra:** Si tocaste `infra/` o `ops/`, ¿lo probaste localmente con Docker?
+
+            > *Recorda: En este repo no usamos Branch Protection paga. La disciplina es visual: NO mergear si hay algo en rojo.*
+

@@ -9,11 +9,17 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { ContactModule } from './modules/contact/contact.module';
 import { MediaModule } from './modules/media/media.module';
 import { GithubModule } from './modules/github/github.module';
+import { MailModule } from './modules/mail/mail.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
+
+import { validateEnv } from './config/env.schema';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnv,
+    }),
     PrismaModule,
     AuthModule,
     ContentModule,
@@ -21,6 +27,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
     ContactModule,
     MediaModule,
     GithubModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],

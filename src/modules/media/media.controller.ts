@@ -1,5 +1,5 @@
-import { Controller, Post, UploadedFile, UseGuards, UseInterceptors, BadRequestException } from '@nestjs/common';
-import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Controller, Post, Delete, Param, UploadedFile, UseGuards, UseInterceptors, BadRequestException, NotFoundException } from '@nestjs/common';
+import { ApiBearerAuth, ApiConsumes, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -50,5 +50,15 @@ export class MediaController {
 
     const record = await this.mediaService.createFromUpload(file);
     return { id: record.id, url: record.url };
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete media by ID' })
+  async delete(@Param('id') id: string) {
+    const deleted = await this.mediaService.deleteMedia(id);
+    if (!deleted) {
+      throw new NotFoundException('Media not found');
+    }
+    return { success: true };
   }
 }
