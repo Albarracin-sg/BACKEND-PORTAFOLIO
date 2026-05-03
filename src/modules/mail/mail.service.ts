@@ -25,6 +25,10 @@ export class MailService {
         user,
         pass,
       },
+      timeout: {
+        connect: 5000,
+        socket: 10000,
+      },
     });
 
     this.templatesDir = path.join(
