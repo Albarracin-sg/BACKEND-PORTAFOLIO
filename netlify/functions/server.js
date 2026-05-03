@@ -1,5 +1,5 @@
 // Netlify Function that runs NestJS
-const { startServer } = require('../../dist/main');
+const { startServer } = require('../dist/main');
 
 let serverPromise = null;
 
