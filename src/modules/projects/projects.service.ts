@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -92,6 +93,7 @@ export class ProjectsService {
     await this.publicProjectsSyncPromise;
   }
 
+  @Cron(CronExpression.EVERY_12_HOURS)
   async syncGithubProjects() {
     const repos = await this.githubService.listRepos();
     const sortedByStars = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count);
