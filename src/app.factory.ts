@@ -35,8 +35,11 @@ export async function configureApp(app: NestExpressApplication) {
       ? true
       : env.CORS_ORIGIN.split(',').map((item) => item.trim());
 
+  console.log('CORS_ORIGIN config:', env.CORS_ORIGIN);
+  
+  // Debug: allow all origins temporarily
   app.enableCors({
-    origin: corsOrigin,
+    origin: true, // Allow all for debugging
     credentials: true,
   });
 

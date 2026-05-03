@@ -1,32 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CreateContactDto } from '../contact/dto/create-contact.dto';
 
+// Brevo SDK
+import SibApiV3Sdk from 'sib-api-v3-sdk';
+
 @Injectable()
 export class MailService {
-  private transporter: nodemailer.Transporter;
+  private apiClient: SibApiV3Sdk.ApiClient;
+  private senderEmail: string;
+  private senderName: string;
   private templatesDir: string;
 
   constructor(private readonly configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST') || 'smtp-relay.brevo.com';
-    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
+    // Configure Brevo API client - use env var to avoid exposing in code
+    const apiKey = process.env.BREVO_API_KEY || this.configService.get<string>('BREVO_API_KEY');
+    
+    this.apiClient = SibApiV3Sdk.ApiClient.instance;
+    this.apiClient.authentications['api-key'].apiKey = apiKey;
 
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: false,
-      auth: {
-        user,
-        pass,
-      },
-    });
-
+    this.senderEmail = this.configService.get<string>('MAIL_FROM') || 'juancamiloalbarracinurrego@gmail.com';
+    this.senderName = this.configService.get<string>('MAIL_FROM_NAME') || 'Portfolio';
+    
     this.templatesDir = path.join(
       __dirname,
       '..',
@@ -58,16 +56,20 @@ export class MailService {
         message: data.message,
       });
 
-      await this.transporter.sendMail({
-        from: this.configService.get<string>('MAIL_FROM') || 'Portfolio <juancamiloalbarracinurrego@gmail.com>',
-        to: adminEmail,
-        subject: `Nuevo contacto: ${data.subject}`,
-        html,
-      });
+      // Using Brevo SDK to send email
+      const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+      
+      const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+      sendSmtpEmail.sender = { email: this.senderEmail, name: this.senderName };
+      sendSmtpEmail.to = [{ email: adminEmail }];
+      sendSmtpEmail.subject = `Nuevo contacto: ${data.subject}`;
+      sendSmtpEmail.htmlContent = html;
+
+      await apiInstance.sendTransacEmail(sendSmtpEmail);
 
       console.log('✅ Mail de notificación enviado correctamente');
     } catch (err) {
-      console.error('❌ Error al enviar mail de notificación:', err);
+      console.error('❌ Error al enviar mail de notificación:', err.response?.body || err.message);
       throw err;
     }
   }
@@ -85,16 +87,20 @@ export class MailService {
         message: data.message,
       });
 
-      await this.transporter.sendMail({
-        from: this.configService.get<string>('MAIL_FROM') || 'Portfolio <juancamiloalbarracinurrego@gmail.com>',
-        to: userEmail,
-        subject: '¡Gracias por contactarme!',
-        html,
-      });
+      // Using Brevo SDK to send email
+      const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+      
+      const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+      sendSmtpEmail.sender = { email: this.senderEmail, name: this.senderName };
+      sendSmtpEmail.to = [{ email: userEmail }];
+      sendSmtpEmail.subject = '¡Gracias por contactarme!';
+      sendSmtpEmail.htmlContent = html;
+
+      await apiInstance.sendTransacEmail(sendSmtpEmail);
 
       console.log('✅ Mail de confirmación enviado correctamente');
     } catch (err) {
-      console.error('❌ Error al enviar mail de confirmación:', err);
+      console.error('❌ Error al enviar mail de confirmación:', err.response?.body || err.message);
       throw err;
     }
   }
