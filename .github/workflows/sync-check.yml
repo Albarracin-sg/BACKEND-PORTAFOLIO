@@ -1,0 +1,23 @@
+name: Triple Verifier Sync
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch: # Permite correrlo manualmente desde GitHub
+
+jobs:
+  trigger-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Render Deployment
+        run: sleep 60 # Damos un minuto para que Render empiece a procesar el deploy
+
+      - name: Trigger Portfolio Sync
+        run: |
+          RESPONSE=$(curl -s -X POST "https://backend-portafolio-f6gx.onrender.com/api/v1/public/projects/webhook")
+          echo "Sync response: $RESPONSE"
+          if [[ $RESPONSE == *"Sync triggered successfully"* ]]; then
+            echo "Triple Check: SUCCESS"
+          else
+            echo "Triple Check: WARNING - Manual check might be needed"
+          fi
