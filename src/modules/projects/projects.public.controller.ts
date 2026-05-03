@@ -1,5 +1,5 @@
-import { Controller, Get, Header, Param, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Controller, Post, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 
 @ApiTags('public-projects')
@@ -7,21 +7,14 @@ import { ProjectsService } from './projects.service';
 export class ProjectsPublicController {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  @Get()
-  @Header('Cache-Control', 'no-store')
-  listProjects(
-    @Query('search') search?: string,
-    @Query('category') category?: string,
-    @Query('tech') tech?: string,
-    @Query('sortBy') sortBy?: 'date' | 'stars' | 'name' | 'views',
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-  ) {
-    return this.projectsService.listPublicProjects({ search, category, tech, sortBy, sortOrder });
-  }
-
-  @Get(':id')
-  @Header('Cache-Control', 'no-store')
-  getProject(@Param('id') id: string) {
-    return this.projectsService.getProject(id);
+  @Post('webhook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'GitHub Webhook endpoint to sync projects on push' })
+  async handleGithubWebhook() {
+    // Aquí podrías validar la firma de GitHub por seguridad si quisieras (X-Hub-Signature-256)
+    // Por ahora lo hacemos simple para que funcione al toque
+    console.log('GitHub Webhook received! Syncing projects...');
+    await this.projectsService.syncGithubProjects();
+    return { message: 'Sync triggered successfully' };
   }
 }
