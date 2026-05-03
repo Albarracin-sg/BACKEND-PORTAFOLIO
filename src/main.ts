@@ -1,8 +1,21 @@
 import { createHttpApp } from './app.factory';
 
-async function bootstrap() {
-  const { app, env } = await createHttpApp();
+let appInstance = null;
 
-  await app.listen(env.PORT);
+export async function startServer() {
+  if (!appInstance) {
+    const { app, env } = await createHttpApp();
+    await app.listen(env.PORT);
+    appInstance = app;
+  }
+  return appInstance;
 }
-bootstrap();
+
+async function bootstrap() {
+  await startServer();
+}
+
+// Only run bootstrap if not in Netlify
+if (!process.env.NETLIFY) {
+  bootstrap();
+}
