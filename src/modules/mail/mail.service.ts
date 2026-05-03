@@ -18,18 +18,14 @@ export class MailService {
     const pass = this.configService.get<string>('SMTP_PASS');
 
     this.transporter = nodemailer.createTransport({
-      host,
-      port,
+      host: 'smtp.gmail.com',
+      port: 587,
       secure: false,
       auth: {
         user,
         pass,
       },
-      timeout: {
-        connect: 5000,
-        socket: 10000,
-      },
-    });
+    } as nodemailer.TransportOptions);
 
     this.templatesDir = path.join(
       __dirname,
