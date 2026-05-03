@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -14,15 +14,22 @@ interface ProjectQuery {
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
+  private publicProjectsSyncPromise: Promise<void> | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly githubService: GithubService,
   ) {}
 
   async listPublicProjects(query: ProjectQuery) {
-    const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
+    const projectCount = await this.prisma.project.count();
 
-    await this.syncGithubProjects().catch(() => null);
+    if (projectCount === 0) {
+      await this.ensurePublicProjectsSynced();
+    }
+
+    const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
 
     const orderBy =
       sortBy === 'name'
@@ -66,6 +73,23 @@ export class ProjectsService {
       include: { technologies: { include: { technology: true } } },
       orderBy,
     });
+  }
+
+  private async ensurePublicProjectsSynced() {
+    if (!this.publicProjectsSyncPromise) {
+      this.publicProjectsSyncPromise = (async () => {
+        try {
+          await this.syncGithubProjects();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          this.logger.warn(`Automatic GitHub project sync skipped: ${message}`);
+        } finally {
+          this.publicProjectsSyncPromise = null;
+        }
+      })();
+    }
+
+    await this.publicProjectsSyncPromise;
   }
 
   async syncGithubProjects() {
@@ -125,9 +149,22 @@ export class ProjectsService {
         continue;
       }
 
+      const technologies = [repo.language, ...(repo.topics ?? [])]
+        .filter((value): value is string => Boolean(value))
+        .map((name) => ({
+          technology: {
+            connectOrCreate: {
+              where: { name },
+              create: { name },
+            },
+          },
+        }));
+
       await this.prisma.project.update({
         where: { id: existing.id },
         data: {
+          title: repo.name,
+          description: repo.description ?? existing.description,
           imageUrl:
             existing.imageUrl ||
             `https://opengraph.githubassets.com/1/${repo.owner.login}/${repo.name}`,
@@ -135,12 +172,20 @@ export class ProjectsService {
           forks: repo.forks_count ?? existing.forks,
           date: new Date(repo.pushed_at ?? repo.updated_at),
           liveUrl: repo.homepage || existing.liveUrl,
+          technologies: {
+            deleteMany: {},
+            create: technologies,
+          },
         },
       });
       updated += 1;
     }
 
     return { total: repos.length, created, updated };
+  }
+
+  private async loadGithubProjects() {
+    return [];
   }
 
   async getProject(id: string) {
