@@ -12,20 +12,22 @@ export class MailService {
   private templatesDir: string;
 
   constructor(private readonly configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
+    // Usar Ethereal para producción (funciona en Render)
+    // fallback a Gmail para desarrollo local
+    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.ethereal.email';
     const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASS');
+    const user = this.configService.get<string>('SMTP_USER') || 'cassandra.vonrueden93@ethereal.email';
+    const pass = this.configService.get<string>('SMTP_PASS') || '3ZDQ7qtcSDzMTFErND';
 
     this.transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
+      host,
+      port,
       secure: false,
       auth: {
         user,
         pass,
       },
-    } as nodemailer.TransportOptions);
+    });
 
     this.templatesDir = path.join(
       __dirname,
