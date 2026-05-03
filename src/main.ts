@@ -1,6 +1,6 @@
 import { createHttpApp } from './app.factory';
-
-let appInstance = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let appInstance: any = null;
 
 export async function startServer() {
   if (!appInstance) {
