@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,11 +8,25 @@ import { CreateContactDto } from '../contact/dto/create-contact.dto';
 
 @Injectable()
 export class MailService {
-  private resend: Resend;
+  private transporter: nodemailer.Transporter;
   private templatesDir: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.resend = new Resend(this.configService.get('RESEND_API_KEY'));
+    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com';
+    const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS');
+
+    this.transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: false,
+      auth: {
+        user,
+        pass,
+      },
+    });
+
     this.templatesDir = path.join(
       __dirname,
       '..',
@@ -44,8 +58,8 @@ export class MailService {
         message: data.message,
       });
 
-      await this.resend.emails.send({
-        from: `Portfolio <onboarding@resend.dev>`,
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('MAIL_FROM') || 'Portfolio <juancamiloalbarracinurrego@gmail.com>',
         to: adminEmail,
         subject: `Nuevo contacto: ${data.subject}`,
         html,
@@ -71,8 +85,8 @@ export class MailService {
         message: data.message,
       });
 
-      await this.resend.emails.send({
-        from: `Portfolio <onboarding@resend.dev>`,
+      await this.transporter.sendMail({
+        from: this.configService.get<string>('MAIL_FROM') || 'Portfolio <juancamiloalbarracinurrego@gmail.com>',
         to: userEmail,
         subject: '¡Gracias por contactarme!',
         html,
