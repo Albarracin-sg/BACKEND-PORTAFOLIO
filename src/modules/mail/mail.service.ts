@@ -12,12 +12,10 @@ export class MailService {
   private templatesDir: string;
 
   constructor(private readonly configService: ConfigService) {
-    // Usar Ethereal para producción (funciona en Render)
-    // fallback a Gmail para desarrollo local
-    const host = this.configService.get<string>('SMTP_HOST') || 'smtp.ethereal.email';
+    const host = this.configService.get<string>('SMTP_HOST') || 'smtp-relay.brevo.com';
     const port = parseInt(this.configService.get<string>('SMTP_PORT') || '587', 10);
-    const user = this.configService.get<string>('SMTP_USER') || 'cassandra.vonrueden93@ethereal.email';
-    const pass = this.configService.get<string>('SMTP_PASS') || '3ZDQ7qtcSDzMTFErND';
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS');
 
     this.transporter = nodemailer.createTransport({
       host,
