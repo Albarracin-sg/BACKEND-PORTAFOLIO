@@ -20,6 +20,10 @@ export class HuggingFaceService {
   // In-memory conversation storage (for simplicity - can be replaced with DB)
   private readonly conversations = new Map<string, ConversationMessage[]>();
   
+  // Request tracking
+  private requestCount = 0;
+  private requestTimestamps: number[] = [];
+  
   // Personality prompt for Juan Camilo (imported from config)
   private readonly personalityPrompt = BOT_PERSONALITY.systemPrompt;
 
@@ -59,9 +63,42 @@ export class HuggingFaceService {
   }
 
   /**
+   * Track request for metrics
+   */
+  private trackRequest() {
+    const now = Date.now();
+    this.requestCount++;
+    this.requestTimestamps.push(now);
+    
+    // Keep only last 60 seconds of timestamps
+    const oneMinuteAgo = now - 60000;
+    this.requestTimestamps = this.requestTimestamps.filter(ts => ts > oneMinuteAgo);
+    
+    const requestsPerMinute = this.requestTimestamps.length;
+    this.logger.log(`📊 Requests: ${this.requestCount} total | ${requestsPerMinute}/min`);
+  }
+
+  /**
+   * Get request stats
+   */
+  getStats() {
+    const oneMinuteAgo = Date.now() - 60000;
+    const recentRequests = this.requestTimestamps.filter(ts => ts > oneMinuteAgo).length;
+    
+    return {
+      totalRequests: this.requestCount,
+      requestsPerMinute: recentRequests,
+      activeConversations: this.conversations.size,
+    };
+  }
+
+  /**
    * Send a chat message to HuggingFace and get a response
    */
   async chat(message: string, conversationId?: string): Promise<ChatResponse> {
+    // Track this request
+    this.trackRequest();
+    
     const apiKey = this.configService.get<string>('HUGGINGFACE_API_KEY');
     const model = this.configService.get<string>('HUGGINGFACE_MODEL');
     const apiUrl = this.configService.get<string>('HUGGINGFACE_API_URL');

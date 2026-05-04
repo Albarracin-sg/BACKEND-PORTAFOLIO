@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   HttpCode,
   HttpStatus,
@@ -23,5 +24,11 @@ export class BotController {
     // Validate with Zod
     const validated = BotChatDto.parse(dto);
     return this.huggingFaceService.chat(validated.message, validated.conversationId);
+  }
+
+  @Get('stats')
+  @HttpCode(HttpStatus.OK)
+  getStats() {
+    return this.huggingFaceService.getStats();
   }
 }
