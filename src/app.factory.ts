@@ -90,7 +90,15 @@ Built with NestJS, Prisma, and PostgreSQL.`,
 
   // Protect /docs with Basic Auth using env credentials
   const basicAuth = await import('basic-auth');
-  app.use('/docs', (req, res, next) => {
+  app.use('/api/v1/docs', (req, res, next) => {
+    const credentials = basicAuth.default(req);
+    if (!credentials || credentials.name !== env.DOCS_USERNAME || credentials.pass !== env.DOCS_PASSWORD) {
+      res.set('WWW-Authenticate', 'Basic realm="Portfolio API Docs"');
+      return res.status(401).send('Authentication required.');
+    }
+    next();
+  });
+  app.use('/api/v1/docs-json', (req, res, next) => {
     const credentials = basicAuth.default(req);
     if (!credentials || credentials.name !== env.DOCS_USERNAME || credentials.pass !== env.DOCS_PASSWORD) {
       res.set('WWW-Authenticate', 'Basic realm="Portfolio API Docs"');
