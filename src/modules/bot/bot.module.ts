@@ -4,9 +4,10 @@ import { BotController } from './controllers/bot.controller';
 import { HuggingFaceService } from './services/huggingface.service';
 import { GithubModule } from '../github/github.module';
 import { ProjectsModule } from '../projects/projects.module';
+import { AdminModule } from '../admin/admin.module';
 
 @Module({
-  imports: [ConfigModule, GithubModule, ProjectsModule],
+  imports: [ConfigModule, GithubModule, ProjectsModule, AdminModule],
   controllers: [BotController],
   providers: [HuggingFaceService],
   exports: [HuggingFaceService],
