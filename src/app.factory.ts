@@ -54,27 +54,7 @@ export async function configureApp(app: NestExpressApplication) {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Portfolio API')
     .setDescription(
-`Backend REST API for the personal portfolio project.
-
-**Features:**
-• Content Management (pages, sections) with live editing
-• Project showcase with GitHub sync integration
-• Real-time Spotify now-playing status
-• AI-powered chatbot via HuggingFace
-• Contact form with email notifications
-• Media upload and management
-
-**Authentication:**
-Most admin endpoints require a JWT Bearer token. Use the \`POST /auth/login\` endpoint to authenticate, then paste the token into the 🔓 **Authorize** button above.
-
-**⚠️ Demo Environment:**
-This is a public demo. Authenticated users have direct access to the database through the API. Feel free to create, update, and delete content — it's a portfolio, not production.
-
-**Rate Limiting:**
-All public endpoints have rate limiting configured per endpoint type.
-
----
-Built with NestJS, Prisma, and PostgreSQL.`,
+`Backend REST API for the personal portfolio project. Built with NestJS, Prisma, and PostgreSQL.`,
     )
     .setVersion('1.0')
     .addBearerAuth({
@@ -99,7 +79,8 @@ Built with NestJS, Prisma, and PostgreSQL.`,
   app.use('/api/v1/docs', swaggerMiddleware);
   app.use('/api/v1/docs-json', swaggerMiddleware);
 
-  SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
+  // SwaggerModule.setup does NOT inherit globalPrefix — must specify full path
+  SwaggerModule.setup('api/v1/docs', app, document, { customSiteTitle: 'Portfolio API' });
 
   // Filter admin endpoints — only public routes visible in docs
   const allPaths = Object.keys(document.paths || {});
