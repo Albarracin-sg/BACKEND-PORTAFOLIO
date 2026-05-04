@@ -165,20 +165,19 @@ describe('SpotifyService', () => {
       },
     });
 
+    // First call - cache miss, fetches from external
     const firstResult = await service.getNowPlaying();
+    expect(firstResult.track.name).toBe('Cache Me');
+    expect(global.fetch).toHaveBeenCalledTimes(2); // token + track
     
-    // First call should be a cache miss (external request)
-    expect(firstResult.cached).toBe(true);
-    
-    // Second call should use cache - NOT trigger another external request
+    // Second call - should use cache (no external calls)
     const secondResult = await service.getNowPlaying();
     expect(secondResult.track.name).toBe('Cache Me');
-    expect(secondResult.cached).toBe(true); // Still cached, same result
+    expect(global.fetch).toHaveBeenCalledTimes(2); // still 2, no new calls
     
-    // advance time past TTL
+    // After TTL expires - should fetch again
     jest.advanceTimersByTime(30001);
     
-    // Reset mock to return new token and track
     mockFetchOnce({ access_token: 'spotify-access-token-2' });
     mockFetchOnce({
       is_playing: true,
@@ -195,8 +194,8 @@ describe('SpotifyService', () => {
       },
     });
     
-    // After TTL expires, should fetch new data
     const thirdResult = await service.getNowPlaying();
     expect(thirdResult.track.name).toBe('Cache Miss');
+    expect(global.fetch).toHaveBeenCalledTimes(4); // 2 more calls
   });
 });
