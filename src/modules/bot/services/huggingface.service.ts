@@ -23,6 +23,10 @@ export class HuggingFaceService {
   // In-memory conversation storage
   private readonly conversations = new Map<string, ConversationMessage[]>();
   
+  // Request tracking
+  private requestCount = 0;
+  private requestTimestamps: number[] = [];
+  
   // Personality prompt for Juan Camilo
   private readonly personalityPrompt = BOT_PERSONALITY.systemPrompt;
 
