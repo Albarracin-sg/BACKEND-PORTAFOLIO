@@ -12,9 +12,8 @@ import { GithubModule } from './modules/github/github.module';
 import { MailModule } from './modules/mail/mail.module';
 import { SpotifyModule } from './modules/spotify/spotify.module';
 import { BotModule } from './modules/bot/bot.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
-import { RequestStatsService } from './common/services/request-stats.service';
-import { StatsController } from './common/controllers/stats.controller';
 
 import { validateEnv } from './config/env.schema';
 
@@ -34,9 +33,10 @@ import { validateEnv } from './config/env.schema';
     SpotifyModule,
     MailModule,
     BotModule,
+    AdminModule,
   ],
-  controllers: [AppController, StatsController],
-  providers: [AppService, RequestStatsService],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

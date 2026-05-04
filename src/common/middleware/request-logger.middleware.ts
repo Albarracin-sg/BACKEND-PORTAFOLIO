@@ -1,12 +1,12 @@
 import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { RequestStatsService } from '../services/request-stats.service';
+import { AdminStatsService } from '../../modules/admin/services/admin-stats.service';
 
 @Injectable()
 export class RequestLoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
-  constructor(private readonly statsService: RequestStatsService) {}
+  constructor(private readonly statsService: AdminStatsService) {}
 
   use(req: Request, res: Response, next: NextFunction) {
     const { method, originalUrl } = req;
@@ -17,8 +17,8 @@ export class RequestLoggerMiddleware implements NestMiddleware {
       const status = res.statusCode;
       this.logger.log(`${method} ${originalUrl} ${status} - ${ms}ms`);
       
-      // Record stats (exclude /bot/stats and /health endpoints)
-      if (!originalUrl.includes('/bot/stats') && !originalUrl.includes('/health')) {
+      // Record stats (exclude admin/stats and /health endpoints)
+      if (!originalUrl.includes('/admin/stats') && !originalUrl.includes('/health')) {
         this.statsService.recordRequest(method, originalUrl, status, ms);
       }
     });
