@@ -16,7 +16,7 @@ export class AdminStatsController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  getStats() {
-    return this.statsService.getStats();
+  async getStats() {
+    return await this.statsService.getStats();
   }
 }

@@ -2,6 +2,9 @@ import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { BOT_PERSONALITY } from '../../../config/prompts/bot.personality';
+import { GithubService } from '../../github/github.service';
+import { ProjectsService } from '../../projects/projects.service';
+import { AdminStatsService } from '../../admin/services/admin-stats.service';
 
 interface ConversationMessage {
   role: 'system' | 'user' | 'assistant';
@@ -17,21 +20,75 @@ export interface ChatResponse {
 export class HuggingFaceService {
   private readonly logger = new Logger(HuggingFaceService.name);
   
-  // In-memory conversation storage (for simplicity - can be replaced with DB)
+  // In-memory conversation storage
   private readonly conversations = new Map<string, ConversationMessage[]>();
   
-  // Request tracking
-  private requestCount = 0;
-  private requestTimestamps: number[] = [];
-  
-  // Personality prompt for Juan Camilo (imported from config)
+  // Personality prompt for Juan Camilo
   private readonly personalityPrompt = BOT_PERSONALITY.systemPrompt;
 
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    private readonly githubService: GithubService,
+    private readonly projectsService: ProjectsService,
+    private readonly statsService: AdminStatsService,
+  ) {}
+
+  /**
+   * Get real-time context about Juan's work, projects and site navigation
+   */
+  private async getJuanContext(): Promise<string> {
+    try {
+      const [githubStats, projects, apiStats] = await Promise.all([
+        this.githubService.getStats().catch(() => null),
+        this.projectsService.listPublicProjects({}).catch(() => []),
+        this.statsService.getStats().catch(() => null),
+      ]);
+
+      let context = '\n\nDATOS REALES EN TIEMPO REAL (Úsalos para responder preguntas específicas):\n';
+
+      // Navigation & Sections
+      context += `SECCIONES DEL SITIO Y NAVEGACIÓN:\n`;
+      context += `- Inicio: #home\n`;
+      context += `- Sobre mí: #about\n`;
+      context += `- Proyectos: #projects (Página completa en /projects)\n`;
+      context += `- Estadísticas: /stats (O sección #stats)\n`;
+      context += `- Contacto: #contact\n`;
+      context += `INSTRUCCIÓN: Si el usuario quiere ir a una sección, indícale el link o el ancla (ej: "Podés ver mis proyectos en /projects").\n\n`;
+
+      if (githubStats) {
+        context += `GITHUB STATS:\n`;
+        context += `- Username: ${githubStats.username}\n`;
+        context += `- Repos: ${githubStats.totalRepos} (Public: ${githubStats.publicRepos}, Private: ${githubStats.privateRepos})\n`;
+        context += `- Stars: ${githubStats.stars} | Followers: ${githubStats.followers}\n`;
+        context += `- Tech: ${githubStats.languageData.map(l => l.name).join(', ')}\n\n`;
+      }
+
+      if (projects && projects.length > 0) {
+        context += `PROYECTOS DESTACADOS:\n`;
+        projects.slice(0, 5).forEach((p: any) => {
+          context += `- ${p.title}: ${p.description}\n`;
+        });
+        context += `\n`;
+      }
+
+      if (apiStats) {
+        context += `API PERFORMANCE (Estado del Servidor):\n`;
+        context += `- Uptime: ${apiStats.uptime}\n`;
+        context += `- Server Restarts: ${apiStats.restartCount}\n`;
+        context += `- Total Requests: ${apiStats.totalRequests}\n`;
+        context += `- Avg Response: ${apiStats.avgResponseTimeMs}ms\n`;
+        context += `- Requests/min: ${apiStats.requestsPerMinute}\n`;
+      }
+
+      return context;
+    } catch (error) {
+      this.logger.warn(`Failed to fetch Juan context: ${error.message}`);
+      return '';
+    }
+  }
 
   /**
    * Detect if the message is in English or Spanish
-   * Simple heuristic based on common words
    */
   private detectLanguage(text: string): 'en' | 'es' {
     const englishWords = [
@@ -42,13 +99,13 @@ export class HuggingFaceService {
       'them', 'my', 'your', 'his', 'its', 'our', 'their', 'a', 'an', 'and', 'or', 'but',
       'if', 'then', 'so', 'because', 'since', 'for', 'with', 'about', 'into', 'from',
       'project', 'code', 'stack', 'technology', 'help', 'thanks', 'thank', 'please',
-      'hello', 'hi', 'hey', 'can', 'would', 'could', 'know', 'tell', 'show', 'give',
-      'make', 'need', 'want', 'think', 'see', 'look', 'work', 'using', 'built', 'create'
+      'hello', 'hi', 'hey', 'know', 'tell', 'show', 'give', 'make', 'need', 'want', 
+      'work', 'using', 'built', 'create', 'awesome', 'great', 'wow'
     ];
     
     const words = text.toLowerCase().split(/\s+/);
     const englishCount = words.filter(w => englishWords.includes(w)).length;
-    const threshold = Math.max(3, words.length * 0.2);
+    const threshold = Math.max(2, words.length * 0.15);
     
     return englishCount >= threshold ? 'en' : 'es';
   }
@@ -58,8 +115,8 @@ export class HuggingFaceService {
    */
   private getLanguageInstruction(language: 'en' | 'es'): string {
     return language === 'en'
-      ? `\n\nIMPORTANT: The user is writing in English. Respond in English with the same warm, direct tone as always. Use words like "bro", "dude", "cool", "nice" naturally.`
-      : `\n\nIMPORTANTE: El usuario escribe en español. Responde en español con el mismo tono cálido y directo de siempre. Usá palabras como "chavalín", "brother", "dale", "pillé" naturalmente.`;
+      ? `\n\nLANGUAGE INSTRUCTION: The user is speaking English. Respond in English. Keep the Juan Camilo persona: warm, direct, expert but approachable. Use "dude", "bro", "cool" naturally.`
+      : `\n\nINSTRUCCIÓN DE IDIOMA: El usuario habla español. Respondé en español (voseo rioplatense/colombiano según el tono de Juan). Mantené el personaje: directo, apasionado por el backend, experto. Usá "brother", "dale", "de una", "fantástico" naturalmente.`;
   }
 
   /**
@@ -70,7 +127,6 @@ export class HuggingFaceService {
     this.requestCount++;
     this.requestTimestamps.push(now);
     
-    // Keep only last 60 seconds of timestamps
     const oneMinuteAgo = now - 60000;
     this.requestTimestamps = this.requestTimestamps.filter(ts => ts > oneMinuteAgo);
     
@@ -96,7 +152,6 @@ export class HuggingFaceService {
    * Send a chat message to HuggingFace and get a response
    */
   async chat(message: string, conversationId?: string): Promise<ChatResponse> {
-    // Track this request
     this.trackRequest();
     
     const apiKey = this.configService.get<string>('HUGGINGFACE_API_KEY');
@@ -106,63 +161,39 @@ export class HuggingFaceService {
     const timeout = this.configService.get<number>('HUGGINGFACE_TIMEOUT_MS') || 30000;
 
     if (!apiKey) {
-      throw new HttpException(
-        'Configuración de HuggingFace incompleta',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new HttpException('HuggingFace config incomplete', HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    // Sanitize user message to prevent prompt injection
     const sanitizedMessage = this.sanitizeInput(message);
-
-    // Detect language
     const language = this.detectLanguage(sanitizedMessage);
     const languageInstruction = this.getLanguageInstruction(language);
 
-    // Get or create conversation
+    // Fetch dynamic context about Juan
+    const juanContext = await this.getJuanContext();
+
     const convId = conversationId || randomUUID();
     const conversation = this.conversations.get(convId) || [];
 
     try {
-      // Build messages for the chat API
       const chatMessages = this.buildChatMessages(
-        this.personalityPrompt,
+        this.personalityPrompt + juanContext,
         languageInstruction,
         conversation,
         sanitizedMessage,
       );
 
-      const response = await this.callHuggingFace(
-        apiUrl!, 
-        model!, 
-        apiKey, 
-        chatMessages, 
-        maxTokens, 
-        timeout
-      );
-      
+      const response = await this.callHuggingFace(apiUrl!, model!, apiKey, chatMessages, maxTokens, timeout);
       const reply = this.extractChatReply(response);
 
-      // Store the conversation
       conversation.push({ role: 'user', content: sanitizedMessage });
       conversation.push({ role: 'assistant', content: reply });
       this.conversations.set(convId, conversation);
 
-      return {
-        reply,
-        conversationId: convId,
-      };
+      return { reply, conversationId: convId };
     } catch (error) {
-      this.logger.error(`Error chatting with HuggingFace: ${error.message}`, error.stack);
-      
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      
-      throw new HttpException(
-        'Error al comunicarse con el servicio de IA',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
+      this.logger.error(`Error chatting: ${error.message}`);
+      if (error instanceof HttpException) throw error;
+      throw new HttpException('IA Service Error', HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
 
@@ -181,7 +212,6 @@ export class HuggingFaceService {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      // Use URL directly - already configured for chat completions in .env
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -202,23 +232,13 @@ export class HuggingFaceService {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        throw new HttpException(
-          `Error de HuggingFace: ${response.status} - ${errorBody}`,
-          HttpStatus.BAD_GATEWAY,
-        );
+        throw new HttpException(`HuggingFace error: ${response.status} - ${errorBody}`, HttpStatus.BAD_GATEWAY);
       }
 
       return await response.json();
     } catch (error) {
       clearTimeout(timeoutId);
-      
-      if (error.name === 'AbortError') {
-        throw new HttpException(
-          'Tiempo de espera excedido al comunicarse con la IA',
-          HttpStatus.GATEWAY_TIMEOUT,
-        );
-      }
-      
+      if (error.name === 'AbortError') throw new HttpException('IA Timeout', HttpStatus.GATEWAY_TIMEOUT);
       throw error;
     }
   }
@@ -227,16 +247,15 @@ export class HuggingFaceService {
    * Build messages for the chat API
    */
   private buildChatMessages(
-    personalityPrompt: string,
+    fullSystemPrompt: string,
     languageInstruction: string,
     conversation: ConversationMessage[],
     userMessage: string,
   ): { role: string; content: string }[] {
     const messages: { role: string; content: string }[] = [
-      { role: 'system', content: personalityPrompt + languageInstruction },
+      { role: 'system', content: fullSystemPrompt + languageInstruction },
     ];
 
-    // Add conversation history
     for (const msg of conversation.slice(-10)) {
       messages.push({
         role: msg.role === 'assistant' ? 'assistant' : 'user',
@@ -244,9 +263,7 @@ export class HuggingFaceService {
       });
     }
 
-    // Add current message
     messages.push({ role: 'user', content: userMessage });
-
     return messages;
   }
 
@@ -257,35 +274,23 @@ export class HuggingFaceService {
     if (!response?.choices?.[0]?.message?.content) {
       return 'Lo siento, no pude generar una respuesta.';
     }
-
     return response.choices[0].message.content.trim();
   }
 
   /**
-   * Sanitize user input to prevent prompt injection
+   * Sanitize user input
    */
   private sanitizeInput(input: string): string {
-    // Remove potential prompt injection patterns
     return input
       .replace(/<\|system\|>/gi, '')
       .replace(/<\|user\|>/gi, '')
       .replace(/<\|assistant\|>/gi, '')
-      .replace(/\x00/g, '') // Remove null bytes
+      .replace(/\x00/g, '')
       .trim();
   }
 
   /**
-   * Sanitize output to ensure clean response
-   */
-  private sanitizeOutput(output: string): string {
-    return output
-      .replace(/<\|.*?\|>/g, '') // Remove any remaining special tokens
-      .replace(/\n{3,}/g, '\n\n') // Normalize excessive newlines
-      .trim();
-  }
-
-  /**
-   * Clear conversation history (for testing or reset)
+   * Clear conversation
    */
   clearConversation(conversationId: string): boolean {
     return this.conversations.delete(conversationId);

@@ -1,12 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-
-export interface RequestLog {
-  method: string;
-  path: string;
-  status: number;
-  timestamp: number;
-  responseTime: number;
-}
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export interface EndpointStats {
   path: string;
@@ -16,105 +9,147 @@ export interface EndpointStats {
 }
 
 @Injectable()
-export class AdminStatsService {
+export class AdminStatsService implements OnModuleInit {
   private readonly logger = new Logger(AdminStatsService.name);
-  private readonly requests: RequestLog[] = [];
-  private readonly maxRequests = 10000;
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    await this.incrementRestartCount();
+  }
 
   /**
-   * Record a request
+   * Increment the server restart counter in DB
    */
-  recordRequest(method: string, path: string, status: number, responseTime: number) {
-    const log: RequestLog = {
-      method,
-      path,
-      status,
-      timestamp: Date.now(),
-      responseTime,
-    };
-
-    this.requests.push(log);
-
-    if (this.requests.length > this.maxRequests) {
-      this.requests.shift();
+  private async incrementRestartCount() {
+    try {
+      await this.prisma.serverMetric.upsert({
+        where: { key: 'restart_count' },
+        update: { value: { increment: 1 } },
+        create: { key: 'restart_count', value: 1 },
+      });
+      this.logger.log('🚀 Server restart recorded');
+    } catch (error) {
+      this.logger.error(`Error incrementing restart count: ${error.message}`);
     }
   }
 
   /**
-   * Get overall stats
+   * Get restart count from DB
    */
-  getStats() {
-    const now = Date.now();
-    const oneMinuteAgo = now - 60000;
-    const fiveMinutesAgo = now - 300000;
-    const oneHourAgo = now - 3600000;
+  private async getRestartCount(): Promise<number> {
+    const metric = await this.prisma.serverMetric.findUnique({
+      where: { key: 'restart_count' }
+    });
+    return metric?.value || 0;
+  }
 
-    const recentRequests = this.requests.filter(r => r.timestamp > oneMinuteAgo);
-    const recent5min = this.requests.filter(r => r.timestamp > fiveMinutesAgo);
-    const recent1h = this.requests.filter(r => r.timestamp > oneHourAgo);
+  /**
+   * Record a request in the database
+   */
+  async recordRequest(method: string, path: string, status: number, responseTime: number, ip?: string, userAgent?: string) {
+    try {
+      await this.prisma.requestLog.create({
+        data: {
+          method,
+          path,
+          status,
+          responseTime,
+          ip,
+          userAgent,
+        },
+      });
+    } catch (error) {
+      this.logger.error(`Error recording request log: ${error.message}`);
+    }
+  }
 
-    const requestsPerMinute = recentRequests.length;
+  /**
+   * Get overall stats from DB
+   */
+  async getStats() {
+    const now = new Date();
+    const oneMinuteAgo = new Date(now.getTime() - 60000);
+    const fiveMinutesAgo = new Date(now.getTime() - 300000);
+    const oneHourAgo = new Date(now.getTime() - 3600000);
 
-    const last100 = this.requests.slice(-100);
+    const [
+      totalRequests,
+      recentRequests,
+      recent5min,
+      recent1h,
+      last100,
+      restartCount,
+    ] = await Promise.all([
+      this.prisma.requestLog.count(),
+      this.prisma.requestLog.count({ where: { timestamp: { gte: oneMinuteAgo } } }),
+      this.prisma.requestLog.count({ where: { timestamp: { gte: fiveMinutesAgo } } }),
+      this.prisma.requestLog.count({ where: { timestamp: { gte: oneHourAgo } } }),
+      this.prisma.requestLog.findMany({
+        take: 100,
+        orderBy: { timestamp: 'desc' },
+        select: { responseTime: true }
+      }),
+      this.getRestartCount(),
+    ]);
+
     const avgResponseTime = last100.length > 0
       ? last100.reduce((sum, r) => sum + r.responseTime, 0) / last100.length
       : 0;
 
-    const endpointStats = this.getEndpointStats();
+    const endpointStats = await this.getEndpointStats();
 
     return {
-      totalRequests: this.requests.length,
-      requestsPerMinute,
-      requestsPer5Minutes: recent5min.length,
-      requestsPerHour: recent1h.length,
+      totalRequests,
+      restartCount,
+      requestsPerMinute: recentRequests,
+      requestsPer5Minutes: recent5min,
+      requestsPerHour: recent1h,
       avgResponseTimeMs: Math.round(avgResponseTime),
-      uptime: this.getUptime(),
+      uptime: await this.getUptime(),
       endpoints: endpointStats,
     };
   }
 
   /**
-   * Get stats per endpoint
+   * Get stats per endpoint from DB
    */
-  private getEndpointStats(): EndpointStats[] {
-    const stats = new Map<string, EndpointStats>();
+  private async getEndpointStats(): Promise<EndpointStats[]> {
+    const groupStats = await this.prisma.requestLog.groupBy({
+      by: ['method', 'path'],
+      _count: {
+        _all: true
+      },
+      _avg: {
+        responseTime: true
+      },
+      orderBy: {
+        _count: {
+          _all: 'desc'
+        }
+      },
+      take: 20
+    });
 
-    for (const req of this.requests) {
-      const key = `${req.method} ${req.path}`;
-      
-      if (!stats.has(key)) {
-        stats.set(key, {
-          path: req.path,
-          method: req.method,
-          totalRequests: 0,
-          avgResponseTime: 0,
-        });
-      }
-
-      const stat = stats.get(key)!;
-      stat.totalRequests++;
-    }
-
-    for (const [key, stat] of stats) {
-      const endpointRequests = this.requests.filter(
-        r => `${r.method} ${r.path}` === key
-      );
-      const totalTime = endpointRequests.reduce((sum, r) => sum + r.responseTime, 0);
-      stat.avgResponseTime = Math.round(totalTime / stat.totalRequests);
-    }
-
-    return Array.from(stats.values())
-      .sort((a, b) => b.totalRequests - a.totalRequests);
+    return groupStats.map(stat => ({
+      path: stat.path,
+      method: stat.method,
+      totalRequests: stat._count._all,
+      avgResponseTime: Math.round(stat._avg.responseTime || 0)
+    }));
   }
 
   /**
-   * Get uptime estimate
+   * Get uptime estimate (from first recorded request)
    */
-  private getUptime(): string {
-    if (this.requests.length === 0) return '0s';
+  private async getUptime(): Promise<string> {
+    const firstRequest = await this.prisma.requestLog.findFirst({
+      orderBy: { timestamp: 'asc' }
+    });
+
+    if (!firstRequest) return '0s';
     
-    const firstRequest = this.requests[0];
-    const uptimeMs = Date.now() - firstRequest.timestamp;
+    const uptimeMs = Date.now() - firstRequest.timestamp.getTime();
     
     const seconds = Math.floor(uptimeMs / 1000);
     const minutes = Math.floor(seconds / 60);
@@ -128,10 +163,10 @@ export class AdminStatsService {
   }
 
   /**
-   * Reset stats
+   * Reset stats (Danger: deletes all logs)
    */
-  reset() {
-    this.requests.length = 0;
-    this.logger.log('Stats reset');
+  async reset() {
+    await this.prisma.requestLog.deleteMany();
+    this.logger.log('Stats reset in database');
   }
 }

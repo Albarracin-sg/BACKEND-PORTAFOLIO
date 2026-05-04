@@ -9,16 +9,17 @@ export class PublicStatsController {
 
   @Get()
   @HttpCode(HttpStatus.OK)
-  getStats() {
-    const fullStats = this.statsService.getStats();
+  async getStats() {
+    const fullStats = await this.statsService.getStats();
     
     // Return only public-safe data (no IPs, no error details)
     return {
       totalRequests: fullStats.totalRequests,
+      restartCount: fullStats.restartCount,
       requestsPerMinute: fullStats.requestsPerMinute,
       avgResponseTimeMs: fullStats.avgResponseTimeMs,
       uptime: fullStats.uptime,
-      endpoints: fullStats.endpoints.map(e => ({
+      endpoints: (fullStats.endpoints || []).map(e => ({
         path: e.path,
         method: e.method,
         totalRequests: e.totalRequests,

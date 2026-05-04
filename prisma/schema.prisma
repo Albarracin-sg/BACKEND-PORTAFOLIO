@@ -172,3 +172,20 @@ model Media {
   url          String
   createdAt    DateTime @default(now())
 }
+
+model RequestLog {
+  id           String   @id @default(cuid())
+  method       String
+  path         String
+  status       Int
+  responseTime Int
+  ip           String?
+  userAgent    String?
+  timestamp    DateTime @default(now())
+}
+
+model ServerMetric {
+  key       String   @id
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
