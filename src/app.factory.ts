@@ -68,7 +68,13 @@ export async function configureApp(app: NestExpressApplication) {
 Most admin endpoints require a JWT Bearer token. Use the \`POST /auth/login\` endpoint to authenticate.
 
 **Demo Credentials:**
-Click the 🔓 **Authorize** button at the top, then enter your Bearer token after logging in.
+**Email:** \`admin@portfolio.dev\`
+**Password:** \`admin123\`
+
+Log in and paste the returned token into the 🔓 **Authorize** button above.
+
+**⚠️ Demo Environment:**
+This is a public demo. Authenticated users have direct access to the database through the API. Feel free to create, update, and delete content — it's a portfolio, not production.
 
 **Rate Limiting:**
 All public endpoints have rate limiting configured per endpoint type.
@@ -77,15 +83,11 @@ All public endpoints have rate limiting configured per endpoint type.
 Built with NestJS, Prisma, and PostgreSQL.`,
     )
     .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Enter your JWT token obtained from POST /auth/login',
-      },
-      'JWT',
-    )
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    })
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
