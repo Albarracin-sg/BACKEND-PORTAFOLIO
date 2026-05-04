@@ -1,7 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
-const SPOTIFY_CACHE_TTL_MS = 5_000;
 
 export const SPOTIFY_TRACK_TYPE = {
   NOW_PLAYING: 'now_playing',
@@ -20,6 +18,14 @@ export interface SpotifyTrack {
   albumImageUrl: string;
   durationMs: number;
   progressMs: number;
+}
+
+export interface SpotifyResponse {
+  track: SpotifyTrack;
+  cached: boolean;
+  stale: boolean;
+  fetchedAt: string | null;
+  expiresAt: string | null;
 }
 
 interface SpotifyTokenResponse {
@@ -64,16 +70,126 @@ interface SpotifyRecentlyPlayedResponse {
   items: SpotifyRecentTrackItem[];
 }
 
-interface SpotifyTrackCache {
+interface SpotifyCacheEntry {
   value: SpotifyTrack;
   expiresAt: number;
+  fetchedAt: number;
 }
 
 @Injectable()
 export class SpotifyService {
-  private trackCache: SpotifyTrackCache | null = null;
+  private readonly logger = new Logger(SpotifyService.name);
+  
+  private cache: SpotifyCacheEntry | null = null;
+  private inFlightRequest: Promise<SpotifyResponse> | null = null;
+  private lastError: string | null = null;
 
   constructor(private readonly config: ConfigService) {}
+
+  private getCacheTtlMs(): number {
+    return this.config.get<number>('SPOTIFY_CACHE_TTL_MS') || 30000;
+  }
+
+  async getNowPlaying(): Promise<SpotifyResponse> {
+    const cacheTtl = this.getCacheTtlMs();
+    const now = Date.now();
+
+    // Cache válido - devolver directamente
+    if (this.cache && this.cache.expiresAt > now) {
+      this.logger.log('📦 Spotify cache hit');
+      return this.buildResponse(this.cache.value, false, false, this.cache.fetchedAt, this.cache.expiresAt);
+    }
+
+    // Hay request en progreso - esperar esa misma promesa
+    if (this.inFlightRequest) {
+      this.logger.log('⏳ Spotify waiting for in-flight request');
+      return this.inFlightRequest;
+    }
+
+    // Crear nueva request con protección contra cache stampede
+    this.inFlightRequest = this.fetchSpotifyWithFallback(cacheTtl, now);
+    
+    try {
+      return await this.inFlightRequest;
+    } finally {
+      this.inFlightRequest = null;
+    }
+  }
+
+  private async fetchSpotifyWithFallback(cacheTtl: number, now: number): Promise<SpotifyResponse> {
+    try {
+      // Llamada a Spotify
+      const startTime = Date.now();
+      const accessToken = await this.refreshAccessToken();
+      const currentTrack = await this.tryGetCurrentTrack(accessToken);
+      const recentTrack = currentTrack ? null : await this.tryGetRecentTrack(accessToken);
+      const track = currentTrack ?? recentTrack ?? this.createEmptyTrack();
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`🌐 Spotify external request: ${duration}ms`);
+      
+      // Guardar en cache
+      this.cache = {
+        value: track,
+        expiresAt: now + cacheTtl,
+        fetchedAt: now,
+      };
+      this.lastError = null;
+
+      return this.buildResponse(track, true, false, now, now + cacheTtl);
+      
+    } catch (error) {
+      const sanitizedError = this.sanitizeError(error);
+      this.logger.warn(`⚠️ Spotify error: ${sanitizedError}`);
+      this.lastError = sanitizedError;
+
+      // Si hay cache stale, devolverlo
+      if (this.cache) {
+        this.logger.log('♻️ Fallback to stale cache');
+        return this.buildResponse(
+          this.cache.value, 
+          true, 
+          true, 
+          this.cache.fetchedAt, 
+          this.cache.expiresAt
+        );
+      }
+
+      // No hay cache - devolver error controlado
+      throw new HttpException(
+        `Spotify unavailable: ${sanitizedError}`,
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+  }
+
+  private buildResponse(
+    track: SpotifyTrack, 
+    cached: boolean, 
+    stale: boolean,
+    fetchedAt: number | null,
+    expiresAt: number | null
+  ): SpotifyResponse {
+    return {
+      track,
+      cached,
+      stale,
+      fetchedAt: fetchedAt ? new Date(fetchedAt).toISOString() : null,
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+    };
+  }
+
+  private sanitizeError(error: unknown): string {
+    if (error instanceof Error) {
+      // No exponer detalles sensibles
+      if (error.message.includes('status 401')) return 'Token expired';
+      if (error.message.includes('status 403')) return 'Access forbidden';
+      if (error.message.includes('status 429')) return 'Rate limited';
+      if (error.message.includes('status 5')) return 'Spotify server error';
+      return 'Spotify error';
+    }
+    return 'Unknown error';
+  }
 
   async refreshAccessToken(): Promise<string> {
     const clientId = this.getRequiredEnv('SPOTIFY_CLIENT_ID');
@@ -141,24 +257,6 @@ export class SpotifyService {
     }
 
     return this.mapTrack(recentTrack, SPOTIFY_TRACK_TYPE.RECENTLY_PLAYED, 0);
-  }
-
-  async getNowPlaying(): Promise<SpotifyTrack> {
-    if (this.trackCache && this.trackCache.expiresAt > Date.now()) {
-      return this.trackCache.value;
-    }
-
-    const accessToken = await this.refreshAccessToken();
-    const currentTrack = await this.tryGetCurrentTrack(accessToken);
-    const recentTrack = currentTrack ? null : await this.tryGetRecentTrack(accessToken);
-    const track = currentTrack ?? recentTrack ?? this.createEmptyTrack();
-
-    this.trackCache = {
-      value: track,
-      expiresAt: Date.now() + SPOTIFY_CACHE_TTL_MS,
-    };
-
-    return track;
   }
 
   private getRequiredEnv(key: 'SPOTIFY_CLIENT_ID' | 'SPOTIFY_CLIENT_SECRET' | 'SPOTIFY_REFRESH_TOKEN') {

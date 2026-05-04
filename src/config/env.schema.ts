@@ -33,6 +33,26 @@ export const envSchema = z.object({
   SPOTIFY_CLIENT_ID: z.string(),
   SPOTIFY_CLIENT_SECRET: z.string(),
   SPOTIFY_REFRESH_TOKEN: z.string(),
+  SPOTIFY_CACHE_TTL_MS: z.coerce.number().default(30000),
+  SPOTIFY_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(30),
+  SPOTIFY_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+
+  // GitHub Integration
+  GITHUB_STATS_CACHE_TTL_MS: z.coerce.number().default(600000),
+  GITHUB_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
+  GITHUB_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+
+  // Projects Cache
+  PROJECTS_CACHE_TTL_MS: z.coerce.number().default(300000),
+  PROJECTS_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(60),
+  PROJECTS_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+
+  // Bot Rate Limiting
+  BOT_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(10),
+  BOT_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+
+  // HTTP Timeout
+  HTTP_TIMEOUT_MS: z.coerce.number().default(30000),
 
   // HuggingFace AI Bot Integration
   HUGGINGFACE_API_KEY: z.string().default(''),

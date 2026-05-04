@@ -14,6 +14,9 @@ interface ProjectQuery {
 
 @Injectable()
 export class ProjectsService {
+  private cache: { value: any; expiresAt: number } | null = null;
+  private readonly CACHE_TTL_MS = 300000; // 5 minutos
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly githubService: GithubService,
@@ -22,7 +25,75 @@ export class ProjectsService {
   async listPublicProjects(query: ProjectQuery) {
     const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
 
-    await this.syncGithubProjects().catch(() => null);
+    // Cache check - no hacer sync en cada request!
+    if (this.cache && this.cache.expiresAt > Date.now()) {
+      return this.filterProjects(this.cache.value, query);
+    }
+
+    // Solo hacer query a DB si no hay cache
+    const projects = await this.prisma.project.findMany({
+      where: this.buildWhereClause(query),
+      include: { technologies: { include: { technology: true } } },
+      orderBy: this.buildOrderBy(sortBy, sortOrder),
+    });
+
+    // Guardar en cache
+    this.cache = {
+      value: projects,
+      expiresAt: Date.now() + this.CACHE_TTL_MS,
+    };
+
+    return projects;
+  }
+
+  private buildWhereClause(query: ProjectQuery) {
+    const conditions = [];
+
+    if (query.category && query.category !== 'all') {
+      conditions.push({ category: query.category });
+    }
+
+    if (query.tech && query.tech !== 'all') {
+      conditions.push({
+        technologies: { some: { technology: { name: query.tech } } },
+      });
+    }
+
+    if (query.search) {
+      conditions.push({
+        OR: [
+          { title: { contains: query.search, mode: 'insensitive' } },
+          { description: { contains: query.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    return conditions.length > 0 ? { AND: conditions } : {};
+  }
+
+  private buildOrderBy(sortBy: string, sortOrder: string) {
+    if (sortBy === 'name') return { title: sortOrder };
+    if (sortBy === 'stars') return { stars: sortOrder };
+    if (sortBy === 'views') return { views: sortOrder };
+    return { date: sortOrder };
+  }
+
+  private filterProjects(projects: any[], query: ProjectQuery) {
+    // Aplicar filtros en memoria si hay cache
+    return projects.filter((p) => {
+      if (query.category && query.category !== 'all' && p.category !== query.category) return false;
+      if (query.tech && query.tech !== 'all') {
+        const hasTech = p.technologies?.some((t: any) => t.technology.name === query.tech);
+        if (!hasTech) return false;
+      }
+      return true;
+    });
+  }
+
+  async listPublicProjectsOld(query: ProjectQuery) {
+    const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
+
+    // REMOVIDO: await this.syncGithubProjects().catch(() => null); // ESTO ERA EL PROBLEMA!
 
     const orderBy =
       sortBy === 'name'

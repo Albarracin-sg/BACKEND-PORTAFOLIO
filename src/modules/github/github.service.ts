@@ -67,6 +67,8 @@ export type GithubStats = {
 export class GithubService {
   private repoCache: RepoCache | null = null;
   private statsCache: StatsCache | null = null;
+  private inFlightRequest: Promise<GithubStats> | null = null;
+  private lastError: string | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -76,10 +78,71 @@ export class GithubService {
   }
 
   async getStats(): Promise<GithubStats> {
+    // Cache válido
     if (this.statsCache && this.statsCache.expiresAt > Date.now()) {
+      this.logger?.log('📦 GitHub stats cache hit');
       return this.statsCache.value;
     }
 
+    // Request en progreso - esperar esa misma promesa
+    if (this.inFlightRequest) {
+      this.logger?.log('⏳ GitHub waiting for in-flight request');
+      return this.inFlightRequest;
+    }
+
+    // Crear nueva request
+    this.inFlightRequest = this.fetchStatsWithFallback();
+    
+    try {
+      return await this.inFlightRequest;
+    } finally {
+      this.inFlightRequest = null;
+    }
+  }
+
+  private async fetchStatsWithFallback(): Promise<GithubStats> {
+    try {
+      const startTime = Date.now();
+      const stats = await this.fetchStats();
+      this.logger?.log(`🌐 GitHub external request: ${Date.now() - startTime}ms`);
+      this.lastError = null;
+      return stats;
+    } catch (error) {
+      const sanitizedError = this.sanitizeError(error);
+      this.logger?.warn(`⚠️ GitHub error: ${sanitizedError}`);
+      this.lastError = sanitizedError;
+
+      // Devolver stale cache si existe
+      if (this.statsCache) {
+        this.logger?.log('♻️ Fallback to stale cache');
+        return this.statsCache.value;
+      }
+
+      throw error;
+    }
+  }
+
+  private sanitizeError(error: unknown): string {
+    if (error instanceof Error) {
+      if (error.message.includes('status 403')) return 'Rate limited';
+      if (error.message.includes('status 401')) return 'Unauthorized';
+      if (error.message.includes('status 5')) return 'GitHub server error';
+      return 'GitHub API error';
+    }
+    return 'Unknown error';
+  }
+
+  private get logger() {
+    // Logger lazy para evitar problemas de inicialización
+    try {
+      const { Logger } = require('@nestjs/common');
+      return new Logger('GithubService');
+    } catch {
+      return null;
+    }
+  }
+
+  private async fetchStats(): Promise<GithubStats> {
     const username = this.getUsername();
     const [user, repos, pullRequests] = await Promise.all([
       this.fetchUser(),

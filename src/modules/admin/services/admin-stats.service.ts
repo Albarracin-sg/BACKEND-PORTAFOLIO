@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-interface RequestLog {
+export interface RequestLog {
   method: string;
   path: string;
   status: number;
@@ -8,7 +8,7 @@ interface RequestLog {
   responseTime: number;
 }
 
-interface EndpointStats {
+export interface EndpointStats {
   path: string;
   method: string;
   totalRequests: number;
