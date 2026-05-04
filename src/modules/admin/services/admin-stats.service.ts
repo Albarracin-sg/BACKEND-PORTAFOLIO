@@ -115,28 +115,33 @@ export class AdminStatsService implements OnModuleInit {
    * Get stats per endpoint from DB
    */
   private async getEndpointStats(): Promise<EndpointStats[]> {
-    const groupStats = await this.prisma.requestLog.groupBy({
-      by: ['method', 'path'],
-      _count: {
-        _all: true
-      },
-      _avg: {
-        responseTime: true
-      },
-      orderBy: {
+    try {
+      const groupStats = await this.prisma.requestLog.groupBy({
+        by: ['method', 'path'],
         _count: {
-          _all: 'desc'
-        }
-      },
-      take: 20
-    });
+          id: true
+        },
+        _avg: {
+          responseTime: true
+        },
+        orderBy: {
+          _count: {
+            id: 'desc'
+          }
+        },
+        take: 20
+      });
 
-    return groupStats.map(stat => ({
-      path: stat.path,
-      method: stat.method,
-      totalRequests: stat._count._all,
-      avgResponseTime: Math.round(stat._avg.responseTime || 0)
-    }));
+      return groupStats.map(stat => ({
+        path: stat.path,
+        method: stat.method,
+        totalRequests: stat._count?.id || 0,
+        avgResponseTime: Math.round(stat._avg?.responseTime || 0)
+      }));
+    } catch (error) {
+      this.logger.error(`Error fetching endpoint stats: ${error.message}`);
+      return [];
+    }
   }
 
   /**
