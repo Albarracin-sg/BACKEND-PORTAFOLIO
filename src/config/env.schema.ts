@@ -35,7 +35,7 @@ export const envSchema = z.object({
   SPOTIFY_REFRESH_TOKEN: z.string(),
 
   // HuggingFace AI Bot Integration
-  HUGGINGFACE_API_KEY: z.string(),
+  HUGGINGFACE_API_KEY: z.string().default(''),
   HUGGINGFACE_MODEL: z.string().default('microsoft/Phi-3-mini-128k-instruct'),
   HUGGINGFACE_API_URL: z.string().default('https://api-inference.huggingface.co/models'),
   HUGGINGFACE_MAX_TOKENS: z.coerce.number().default(512),
