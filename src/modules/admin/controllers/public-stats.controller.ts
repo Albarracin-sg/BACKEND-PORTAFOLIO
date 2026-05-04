@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
-import { AdminStatsService } from './admin-stats.service';
+import { AdminStatsService } from '../services/admin-stats.service';
 
 @Controller('public/stats')
 export class PublicStatsController {
