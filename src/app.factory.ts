@@ -91,6 +91,20 @@ Built with NestJS, Prisma, and PostgreSQL.`,
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
+
+  // Inyectar credenciales de demo desde env en la descripción del login
+  const loginOp = document.paths?.['/auth/login']?.post;
+  if (loginOp) {
+    loginOp.description = `Use these demo credentials to test protected endpoints:\n\n**Email:** \`${env.ADMIN_EMAIL}\`\n**Password:** \`${env.ADMIN_PASSWORD}\`\n\nThe returned token must be sent as \`Authorization: Bearer <token>\` to access admin endpoints.`;
+    if (loginOp.requestBody && typeof loginOp.requestBody === 'object' && 'content' in loginOp.requestBody) {
+      const jsonSchema = (loginOp.requestBody as any).content?.['application/json']?.schema;
+      if (jsonSchema?.properties) {
+        jsonSchema.properties.email.example = env.ADMIN_EMAIL;
+        jsonSchema.properties.password.example = env.ADMIN_PASSWORD;
+      }
+    }
+  }
+
   SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
 
   return env;
