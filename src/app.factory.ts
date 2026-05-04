@@ -53,9 +53,39 @@ export async function configureApp(app: NestExpressApplication) {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Portfolio API')
-    .setDescription('Public and admin endpoints for the portfolio CMS')
+    .setDescription(
+`Backend REST API for the personal portfolio project.
+
+**Features:**
+• Content Management (pages, sections) with live editing
+• Project showcase with GitHub sync integration
+• Real-time Spotify now-playing status
+• AI-powered chatbot via HuggingFace
+• Contact form with email notifications
+• Media upload and management
+
+**Authentication:**
+Most admin endpoints require a JWT Bearer token. Use the \`POST /auth/login\` endpoint to authenticate.
+
+**Demo Credentials:**
+Click the 🔓 **Authorize** button at the top, then enter your Bearer token after logging in.
+
+**Rate Limiting:**
+All public endpoints have rate limiting configured per endpoint type.
+
+---
+Built with NestJS, Prisma, and PostgreSQL.`,
+    )
     .setVersion('1.0')
-    .addBearerAuth()
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Enter your JWT token obtained from POST /auth/login',
+      },
+      'JWT',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);

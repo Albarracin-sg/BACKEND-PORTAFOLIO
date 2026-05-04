@@ -13,6 +13,7 @@ const RATE_LIMIT_CONFIG: Record<string, { limitKey: string; windowKey: string }>
   github: { limitKey: 'GITHUB_RATE_LIMIT_MAX_REQUESTS', windowKey: 'GITHUB_RATE_LIMIT_WINDOW_MS' },
   projects: { limitKey: 'PROJECTS_RATE_LIMIT_MAX_REQUESTS', windowKey: 'PROJECTS_RATE_LIMIT_WINDOW_MS' },
   bot: { limitKey: 'BOT_RATE_LIMIT_MAX_REQUESTS', windowKey: 'BOT_RATE_LIMIT_WINDOW_MS' },
+  contact: { limitKey: 'CONTACT_RATE_LIMIT_MAX_REQUESTS', windowKey: 'CONTACT_RATE_LIMIT_WINDOW_MS' },
 };
 
 @Injectable()
