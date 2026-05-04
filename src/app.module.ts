@@ -13,6 +13,8 @@ import { MailModule } from './modules/mail/mail.module';
 import { SpotifyModule } from './modules/spotify/spotify.module';
 import { BotModule } from './modules/bot/bot.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
+import { RequestStatsService } from './common/services/request-stats.service';
+import { StatsController } from './common/controllers/stats.controller';
 
 import { validateEnv } from './config/env.schema';
 
@@ -33,8 +35,8 @@ import { validateEnv } from './config/env.schema';
     MailModule,
     BotModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, StatsController],
+  providers: [AppService, RequestStatsService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
