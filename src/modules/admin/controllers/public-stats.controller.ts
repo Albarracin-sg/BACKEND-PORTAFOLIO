@@ -1,6 +1,8 @@
 import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { AdminStatsService } from '../services/admin-stats.service';
 
+@ApiTags('Public Stats')
 @Controller('public/stats')
 export class PublicStatsController {
   constructor(private readonly statsService: AdminStatsService) {}

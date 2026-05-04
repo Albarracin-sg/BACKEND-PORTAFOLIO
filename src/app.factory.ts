@@ -59,7 +59,7 @@ export async function configureApp(app: NestExpressApplication) {
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/v1/docs', app, document);
+  SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
 
   return env;
 }
