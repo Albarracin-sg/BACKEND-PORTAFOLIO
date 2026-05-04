@@ -64,6 +64,10 @@ export const envSchema = z.object({
   // Initial Admin User (for seeding)
   ADMIN_EMAIL: z.string().email(),
   ADMIN_PASSWORD: z.string().min(6),
+
+  // Swagger Docs Basic Auth
+  DOCS_USERNAME: z.string().default('demo'),
+  DOCS_PASSWORD: z.string().default('demo123'),
 });
 
 export type Env = z.infer<typeof envSchema>;

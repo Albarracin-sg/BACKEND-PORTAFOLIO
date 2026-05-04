@@ -65,13 +65,7 @@ export async function configureApp(app: NestExpressApplication) {
 • Media upload and management
 
 **Authentication:**
-Most admin endpoints require a JWT Bearer token. Use the \`POST /auth/login\` endpoint to authenticate.
-
-**Demo Credentials:**
-**Email:** \`admin@portfolio.dev\`
-**Password:** \`admin123\`
-
-Log in and paste the returned token into the 🔓 **Authorize** button above.
+Most admin endpoints require a JWT Bearer token. Use the \`POST /auth/login\` endpoint to authenticate, then paste the token into the 🔓 **Authorize** button above.
 
 **⚠️ Demo Environment:**
 This is a public demo. Authenticated users have direct access to the database through the API. Feel free to create, update, and delete content — it's a portfolio, not production.
@@ -92,20 +86,18 @@ Built with NestJS, Prisma, and PostgreSQL.`,
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-  // Inyectar credenciales de demo desde env en la descripción del login
-  const loginOp = document.paths?.['/auth/login']?.post;
-  if (loginOp) {
-    loginOp.description = `Use these demo credentials to test protected endpoints:\n\n**Email:** \`${env.ADMIN_EMAIL}\`\n**Password:** \`${env.ADMIN_PASSWORD}\`\n\nThe returned token must be sent as \`Authorization: Bearer <token>\` to access admin endpoints.`;
-    if (loginOp.requestBody && typeof loginOp.requestBody === 'object' && 'content' in loginOp.requestBody) {
-      const jsonSchema = (loginOp.requestBody as any).content?.['application/json']?.schema;
-      if (jsonSchema?.properties) {
-        jsonSchema.properties.email.example = env.ADMIN_EMAIL;
-        jsonSchema.properties.password.example = env.ADMIN_PASSWORD;
-      }
-    }
-  }
-
   SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
+
+  // Protect /docs with Basic Auth using env credentials
+  const basicAuth = await import('basic-auth');
+  app.use('/docs', (req, res, next) => {
+    const credentials = basicAuth.default(req);
+    if (!credentials || credentials.name !== env.DOCS_USERNAME || credentials.pass !== env.DOCS_PASSWORD) {
+      res.set('WWW-Authenticate', 'Basic realm="Portfolio API Docs"');
+      return res.status(401).send('Authentication required.');
+    }
+    next();
+  });
 
   return env;
 }
