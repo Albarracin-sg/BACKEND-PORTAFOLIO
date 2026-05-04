@@ -101,8 +101,8 @@ Built with NestJS, Prisma, and PostgreSQL.`,
   const swaggerMiddleware = (req, res, next) => {
     const credentials = basicAuth.default(req);
     if (!credentials || credentials.name !== env.DOCS_USERNAME || credentials.pass !== env.DOCS_PASSWORD) {
-      res.set('WWW-Authenticate', 'Basic realm="Portfolio API Docs"');
-      return res.status(401).send(`Access denied. Username: ${env.DOCS_USERNAME} | Password: ${env.DOCS_PASSWORD}`);
+      res.set('WWW-Authenticate', `Basic realm="User: ${env.DOCS_USERNAME} Pass: ${env.DOCS_PASSWORD}"`);
+      return res.status(401).send('Access denied.');
     }
     next();
   };
