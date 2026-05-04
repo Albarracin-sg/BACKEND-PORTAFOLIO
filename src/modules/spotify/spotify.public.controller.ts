@@ -10,7 +10,7 @@ export class SpotifyPublicController {
   constructor(private readonly spotifyService: SpotifyService) {}
 
   @Get('now-playing')
-  @RateLimit({ limit: 30, windowMs: 60000 })
+  @RateLimit('spotify')
   @UseGuards(RateLimitGuard)
   @Header('Cache-Control', 'public, max-age=15, stale-while-revalidate=30')
   getNowPlaying(@Ip() ip: string) {

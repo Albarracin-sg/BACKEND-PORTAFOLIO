@@ -21,7 +21,7 @@ export class BotController {
   constructor(private readonly huggingFaceService: HuggingFaceService) {}
 
   @Post('chat')
-  @RateLimit({ limit: 10, windowMs: 60000 })
+  @RateLimit('bot')
   @UseGuards(RateLimitGuard)
   @HttpCode(HttpStatus.OK)
   async chat(

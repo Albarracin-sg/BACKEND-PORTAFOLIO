@@ -10,7 +10,7 @@ export class ProjectsPublicController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
-  @RateLimit({ limit: 60, windowMs: 60000 })
+  @RateLimit('projects')
   @UseGuards(RateLimitGuard)
   @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
   listProjects(

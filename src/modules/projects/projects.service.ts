@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { GithubService } from '../github/github.service';
+import { Prisma } from '@prisma/client';
 
 interface ProjectQuery {
   search?: string;
@@ -46,8 +47,8 @@ export class ProjectsService {
     return projects;
   }
 
-  private buildWhereClause(query: ProjectQuery) {
-    const conditions = [];
+  private buildWhereClause(query: ProjectQuery): Prisma.ProjectWhereInput {
+    const conditions: Prisma.ProjectWhereInput[] = [];
 
     if (query.category && query.category !== 'all') {
       conditions.push({ category: query.category });
@@ -71,11 +72,12 @@ export class ProjectsService {
     return conditions.length > 0 ? { AND: conditions } : {};
   }
 
-  private buildOrderBy(sortBy: string, sortOrder: string) {
-    if (sortBy === 'name') return { title: sortOrder };
-    if (sortBy === 'stars') return { stars: sortOrder };
-    if (sortBy === 'views') return { views: sortOrder };
-    return { date: sortOrder };
+  private buildOrderBy(sortBy: string, sortOrder: string): Prisma.ProjectOrderByWithRelationInput {
+    const order = sortOrder as 'asc' | 'desc';
+    if (sortBy === 'name') return { title: order };
+    if (sortBy === 'stars') return { stars: order };
+    if (sortBy === 'views') return { views: order };
+    return { date: order };
   }
 
   private filterProjects(projects: any[], query: ProjectQuery) {
