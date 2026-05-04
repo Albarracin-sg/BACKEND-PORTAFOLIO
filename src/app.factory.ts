@@ -86,17 +86,7 @@ Built with NestJS, Prisma, and PostgreSQL.`,
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-  SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
-
-  // Filter admin endpoints — only public routes visible in docs
-  const allPaths = Object.keys(document.paths || {});
-  for (const path of allPaths) {
-    if (path.startsWith('/admin')) {
-      delete document.paths[path];
-    }
-  }
-
-  // Protect /api/v1/docs with Basic Auth + show credentials
+  // Protect /api/v1/docs with Basic Auth (MUST be before SwaggerModule.setup)
   const basicAuth = await import('basic-auth');
   const swaggerMiddleware = (req, res, next) => {
     const credentials = basicAuth.default(req);
@@ -108,6 +98,16 @@ Built with NestJS, Prisma, and PostgreSQL.`,
   };
   app.use('/api/v1/docs', swaggerMiddleware);
   app.use('/api/v1/docs-json', swaggerMiddleware);
+
+  SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
+
+  // Filter admin endpoints — only public routes visible in docs
+  const allPaths = Object.keys(document.paths || {});
+  for (const path of allPaths) {
+    if (path.startsWith('/admin')) {
+      delete document.paths[path];
+    }
+  }
 
   return env;
 }
