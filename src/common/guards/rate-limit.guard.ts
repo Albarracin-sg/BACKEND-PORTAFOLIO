@@ -14,6 +14,7 @@ const RATE_LIMIT_CONFIG: Record<string, { limitKey: string; windowKey: string }>
   projects: { limitKey: 'PROJECTS_RATE_LIMIT_MAX_REQUESTS', windowKey: 'PROJECTS_RATE_LIMIT_WINDOW_MS' },
   bot: { limitKey: 'BOT_RATE_LIMIT_MAX_REQUESTS', windowKey: 'BOT_RATE_LIMIT_WINDOW_MS' },
   contact: { limitKey: 'CONTACT_RATE_LIMIT_MAX_REQUESTS', windowKey: 'CONTACT_RATE_LIMIT_WINDOW_MS' },
+  swagger: { limitKey: 'SWAGGER_RATE_LIMIT_MAX_REQUESTS', windowKey: 'SWAGGER_RATE_LIMIT_WINDOW_MS' },
 };
 
 @Injectable()

@@ -88,24 +88,27 @@ Built with NestJS, Prisma, and PostgreSQL.`,
 
   SwaggerModule.setup('docs', app, document, { customSiteTitle: 'Portfolio API' });
 
-  // Protect /docs with Basic Auth using env credentials
+  // Filter admin endpoints — only public routes visible in docs
+  const allPaths = Object.keys(document.paths || {});
+  for (const path of allPaths) {
+    if (path.startsWith('/admin')) {
+      delete document.paths[path];
+    }
+  }
+
+  // Protect /api/v1/docs with Basic Auth + show credentials
   const basicAuth = await import('basic-auth');
-  app.use('/api/v1/docs', (req, res, next) => {
+  const authMessage = `Portfolio API Docs — Username: ${env.DOCS_USERNAME} | Password: ${env.DOCS_PASSWORD}`;
+  const swaggerMiddleware = (req, res, next) => {
     const credentials = basicAuth.default(req);
     if (!credentials || credentials.name !== env.DOCS_USERNAME || credentials.pass !== env.DOCS_PASSWORD) {
-      res.set('WWW-Authenticate', 'Basic realm="Portfolio API Docs"');
-      return res.status(401).send('Authentication required.');
+      res.set('WWW-Authenticate', `Basic realm="${authMessage}"`);
+      return res.status(401).send(`Access denied. Use credentials: ${env.DOCS_USERNAME} / ${env.DOCS_PASSWORD}`);
     }
     next();
-  });
-  app.use('/api/v1/docs-json', (req, res, next) => {
-    const credentials = basicAuth.default(req);
-    if (!credentials || credentials.name !== env.DOCS_USERNAME || credentials.pass !== env.DOCS_PASSWORD) {
-      res.set('WWW-Authenticate', 'Basic realm="Portfolio API Docs"');
-      return res.status(401).send('Authentication required.');
-    }
-    next();
-  });
+  };
+  app.use('/api/v1/docs', swaggerMiddleware);
+  app.use('/api/v1/docs-json', swaggerMiddleware);
 
   return env;
 }

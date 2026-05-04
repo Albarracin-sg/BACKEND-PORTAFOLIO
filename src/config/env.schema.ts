@@ -68,6 +68,10 @@ export const envSchema = z.object({
   // Swagger Docs Basic Auth
   DOCS_USERNAME: z.string().default('demo'),
   DOCS_PASSWORD: z.string().default('demo123'),
+
+  // Swagger Rate Limiting
+  SWAGGER_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(30),
+  SWAGGER_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
 });
 
 export type Env = z.infer<typeof envSchema>;
