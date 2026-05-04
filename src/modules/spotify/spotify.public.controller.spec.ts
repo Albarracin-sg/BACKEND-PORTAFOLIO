@@ -5,22 +5,7 @@ import { SPOTIFY_TRACK_TYPE, type SpotifyService } from './spotify.service';
 
 describe('SpotifyPublicController', () => {
   it('delegates now playing requests to the service', async () => {
-    const spotifyService: Pick<SpotifyService, 'getNowPlaying'> = {
-      getNowPlaying: jest.fn().mockResolvedValue({
-        type: SPOTIFY_TRACK_TYPE.NOW_PLAYING,
-        name: 'Track',
-        artists: 'Artist',
-        url: 'https://spotify.com/track/1',
-        album: 'Album',
-        albumImageUrl: 'https://image',
-        durationMs: 120000,
-        progressMs: 1000,
-      }),
-    };
-
-    const controller = new SpotifyPublicController(spotifyService as SpotifyService);
-
-    await expect(controller.getNowPlaying()).resolves.toEqual({
+    const mockTrack = {
       type: SPOTIFY_TRACK_TYPE.NOW_PLAYING,
       name: 'Track',
       artists: 'Artist',
@@ -29,7 +14,22 @@ describe('SpotifyPublicController', () => {
       albumImageUrl: 'https://image',
       durationMs: 120000,
       progressMs: 1000,
-    });
+    };
+
+    const spotifyService: Pick<SpotifyService, 'getNowPlaying'> = {
+      getNowPlaying: jest.fn().mockResolvedValue({
+        track: mockTrack,
+        cached: false,
+        stale: false,
+        fetchedAt: '2024-01-01T00:00:00.000Z',
+        expiresAt: '2024-01-01T00:00:30.000Z',
+      }),
+    };
+
+    const controller = new SpotifyPublicController(spotifyService as SpotifyService);
+
+    const result = await controller.getNowPlaying();
+    expect(result.track).toEqual(mockTrack);
     expect(spotifyService.getNowPlaying).toHaveBeenCalledTimes(1);
   });
 
