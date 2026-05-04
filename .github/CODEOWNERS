@@ -1,0 +1,10 @@
+# Global owners
+*       @Albarracin-sg
+
+# Infrastructure & Ops
+/infra/ @Albarracin-sg
+/ops/   @Albarracin-sg
+/.github/ @Albarracin-sg
+
+# Business Logic
+/src/modules/ @Albarracin-sg

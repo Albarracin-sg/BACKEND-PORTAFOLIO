@@ -1,0 +1,131 @@
+name: Backend Release (Docker)
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'src/**'
+      - 'infra/**'
+      - 'ops/**'
+      - 'prisma/**'
+      - 'test/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/**'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: portfolio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/portfolio_test?schema=public
+      JWT_SECRET: test-secret-only-for-ci
+      PORT: 3000
+      CORS_ORIGIN: http://localhost:3000
+      ADMIN_EMAIL: admin@test.com
+      ADMIN_PASSWORD: password
+      SMTP_HOST: smtp.test.com
+      SMTP_PORT: 587
+      SMTP_USER: test-user
+      SMTP_PASS: test-pass
+      MAIL_FROM: test@test.com
+      GITHUB_USERNAME: test-user
+      GITHUB_TOKEN: test-token
+      GITHUB_CACHE_TTL_MINUTES: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Biome Lint
+        run: pnpm exec biome ci .
+
+      - name: Prisma Generate and Migrate
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit Tests
+        run: pnpm test
+
+      - name: E2E Tests
+        run: pnpm test:e2e
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: verify
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./infra/docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

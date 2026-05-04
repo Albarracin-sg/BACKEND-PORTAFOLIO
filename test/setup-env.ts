@@ -1,0 +1,9 @@
+process.env.RESEND_API_KEY = 're_test_123456789';
+process.env.DATABASE_URL = 'postgres://test:test@localhost:5432/test';
+process.env.JWT_SECRET = 'test-secret';
+process.env.ADMIN_EMAIL = 'test@test.com';
+process.env.SPOTIFY_CLIENT_ID = 'test-spotify-client-id';
+process.env.SPOTIFY_CLIENT_SECRET = 'test-spotify-client-secret';
+process.env.SPOTIFY_REFRESH_TOKEN = 'test-spotify-refresh-token';
+process.env.CORS_ORIGIN = '*';
+process.env.PORT = '3000';
