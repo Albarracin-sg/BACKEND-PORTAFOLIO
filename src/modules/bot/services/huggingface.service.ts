@@ -68,9 +68,12 @@ export class HuggingFaceService {
       }
 
       if (projects && projects.length > 0) {
-        context += `PROYECTOS DESTACADOS:\n`;
-        projects.slice(0, 5).forEach((p: any) => {
-          context += `- ${p.title}: ${p.description}\n`;
+        context += `\nDETALLE DE PROYECTOS Y REPOSITORIOS:\n`;
+        projects.slice(0, 10).forEach((p: any) => {
+          const techs = p.technologies?.map((t: any) => t.technology.name).join(', ') || 'N/A';
+          context += `- ${p.title}: ${p.description} (Tech: ${techs})\n`;
+          if (p.problem) context += `  Problema: ${p.problem}\n`;
+          if (p.solution) context += `  Solución: ${p.solution}\n`;
         });
         context += `\n`;
       }
@@ -119,8 +122,8 @@ export class HuggingFaceService {
    */
   private getLanguageInstruction(language: 'en' | 'es'): string {
     return language === 'en'
-      ? `\n\nLANGUAGE INSTRUCTION: The user is speaking English. Respond in English. Keep the Juan Camilo persona: warm, direct, expert but approachable. Use "dude", "bro", "cool" naturally.`
-      : `\n\nINSTRUCCIÓN DE IDIOMA: El usuario habla español. Respondé en español (voseo rioplatense/colombiano según el tono de Juan). Mantené el personaje: directo, apasionado por el backend, experto. Usá "brother", "dale", "de una", "fantástico" naturalmente.`;
+      ? `\n\nLANGUAGE INSTRUCTION (MANDATORY): The user is speaking English. You MUST respond in English. Do not use Spanish words unless specifically asked. Keep the Juan Camilo persona: warm, direct, expert but approachable. Use "dude", "bro", "cool" naturally.`
+      : `\n\nINSTRUCCIÓN DE IDIOMA (MANDATORIA): El usuario habla español. Respondé en español (voseo rioplatense/colombiano según el tono de Juan). NO respondas en inglés. Mantené el personaje: directo, apasionado por el backend, experto. Usá "brother", "dale", "de una", "fantástico" naturalmente.`;
   }
 
   /**
