@@ -28,7 +28,7 @@ describe('SpotifyPublicController', () => {
 
     const controller = new SpotifyPublicController(spotifyService as SpotifyService);
 
-    const result = await controller.getNowPlaying();
+    const result = await controller.getNowPlaying('127.0.0.1');
     expect(result.track).toEqual(mockTrack);
     expect(spotifyService.getNowPlaying).toHaveBeenCalledTimes(1);
   });
