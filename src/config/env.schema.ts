@@ -66,8 +66,8 @@ export const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(6),
 
   // Swagger Docs Basic Auth
-  DOCS_USERNAME: z.string().default('demo'),
-  DOCS_PASSWORD: z.string().default('demo123'),
+  DOCS_USERNAME: z.string().default('user'),
+  DOCS_PASSWORD: z.string().default('passwordPortafolio'),
 
   // Swagger Rate Limiting
   SWAGGER_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(30),
