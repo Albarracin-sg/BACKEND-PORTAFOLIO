@@ -80,6 +80,8 @@ export class AdminStatsService implements OnModuleInit {
       recent1h,
       last100,
       restartCount,
+      totalProjects,
+      totalContactMessages,
     ] = await Promise.all([
       this.prisma.requestLog.count(),
       this.prisma.requestLog.count({ where: { timestamp: { gte: oneMinuteAgo } } }),
@@ -91,6 +93,8 @@ export class AdminStatsService implements OnModuleInit {
         select: { responseTime: true }
       }),
       this.getRestartCount(),
+      this.prisma.project.count(),
+      this.prisma.contactMessage.count(),
     ]);
 
     const avgResponseTime = last100.length > 0
@@ -102,6 +106,8 @@ export class AdminStatsService implements OnModuleInit {
     return {
       totalRequests,
       restartCount,
+      totalProjects,
+      totalContactMessages,
       requestsPerMinute: recentRequests,
       requestsPer5Minutes: recent5min,
       requestsPerHour: recent1h,

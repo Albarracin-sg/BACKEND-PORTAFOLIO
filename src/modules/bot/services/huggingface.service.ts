@@ -1,10 +1,11 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { BOT_PERSONALITY } from '../../../config/prompts/bot.personality';
 import { GithubService } from '../../github/github.service';
 import { ProjectsService } from '../../projects/projects.service';
 import { AdminStatsService } from '../../admin/services/admin-stats.service';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 interface ConversationMessage {
   role: 'system' | 'user' | 'assistant';
@@ -17,11 +18,8 @@ export interface ChatResponse {
 }
 
 @Injectable()
-export class HuggingFaceService {
+export class HuggingFaceService implements OnModuleInit {
   private readonly logger = new Logger(HuggingFaceService.name);
-  
-  // In-memory conversation storage
-  private readonly conversations = new Map<string, ConversationMessage[]>();
   
   // Request tracking
   private requestCount = 0;
@@ -29,13 +27,47 @@ export class HuggingFaceService {
   
   // Personality prompt for Juan Camilo
   private readonly personalityPrompt = BOT_PERSONALITY.systemPrompt;
+  private defaultPersonaId: string;
 
   constructor(
     private configService: ConfigService,
     private readonly githubService: GithubService,
     private readonly projectsService: ProjectsService,
     private readonly statsService: AdminStatsService,
+    private readonly prisma: PrismaService,
   ) {}
+
+  async onModuleInit() {
+    await this.ensureDefaultPersona();
+  }
+
+  /**
+   * Ensure a default persona exists in the database
+   */
+  private async ensureDefaultPersona() {
+    try {
+      let persona = await this.prisma.persona.findFirst({
+        where: { name: 'Juan Camilo' }
+      });
+
+      if (!persona) {
+        persona = await this.prisma.persona.create({
+          data: {
+            name: 'Juan Camilo',
+            prompt: this.personalityPrompt,
+            model: this.configService.get('HUGGINGFACE_MODEL') || 'mistralai/Mistral-7B-Instruct-v0.2',
+            settings: {},
+            isActive: true,
+          }
+        });
+        this.logger.log('✅ Default bot persona created');
+      }
+
+      this.defaultPersonaId = persona.id;
+    } catch (error) {
+      this.logger.error(`Error ensuring default persona: ${error.message}`);
+    }
+  }
 
   /**
    * Get real-time context about Juan's work, projects and site navigation
@@ -144,14 +176,15 @@ export class HuggingFaceService {
   /**
    * Get request stats
    */
-  getStats() {
+  async getStats() {
     const oneMinuteAgo = Date.now() - 60000;
     const recentRequests = this.requestTimestamps.filter(ts => ts > oneMinuteAgo).length;
+    const activeThreads = await this.prisma.aIThread.count();
     
     return {
       totalRequests: this.requestCount,
       requestsPerMinute: recentRequests,
-      activeConversations: this.conversations.size,
+      activeConversations: activeThreads,
     };
   }
 
@@ -178,25 +211,54 @@ export class HuggingFaceService {
     // Fetch dynamic context about Juan
     const juanContext = await this.getJuanContext();
 
-    const convId = conversationId || randomUUID();
-    const conversation = this.conversations.get(convId) || [];
+    let threadId = conversationId;
+    let history: ConversationMessage[] = [];
+
+    if (threadId) {
+      const thread = await this.prisma.aIThread.findUnique({
+        where: { id: threadId },
+        include: { messages: { orderBy: { createdAt: 'asc' }, take: 10 } }
+      });
+      if (thread) {
+        history = thread.messages.map(m => ({
+          role: m.role as any,
+          content: m.content
+        }));
+      } else {
+        threadId = undefined; // Thread not found, will create new
+      }
+    }
 
     try {
       const chatMessages = this.buildChatMessages(
         this.personalityPrompt + juanContext,
         languageInstruction,
-        conversation,
+        history,
         sanitizedMessage,
       );
 
       const response = await this.callHuggingFace(apiUrl!, model!, apiKey, chatMessages, maxTokens, timeout);
       const reply = this.extractChatReply(response);
 
-      conversation.push({ role: 'user', content: sanitizedMessage });
-      conversation.push({ role: 'assistant', content: reply });
-      this.conversations.set(convId, conversation);
+      // Save to database
+      if (!threadId) {
+        const newThread = await this.prisma.aIThread.create({
+          data: {
+            personaId: this.defaultPersonaId,
+            title: sanitizedMessage.substring(0, 50),
+          }
+        });
+        threadId = newThread.id;
+      }
 
-      return { reply, conversationId: convId };
+      await this.prisma.aIMessage.createMany({
+        data: [
+          { threadId, role: 'user', content: sanitizedMessage },
+          { threadId, role: 'assistant', content: reply },
+        ]
+      });
+
+      return { reply, conversationId: threadId };
     } catch (error) {
       this.logger.error(`Error chatting: ${error.message}`);
       if (error instanceof HttpException) throw error;
@@ -263,7 +325,7 @@ export class HuggingFaceService {
       { role: 'system', content: fullSystemPrompt + languageInstruction },
     ];
 
-    for (const msg of conversation.slice(-10)) {
+    for (const msg of conversation) {
       messages.push({
         role: msg.role === 'assistant' ? 'assistant' : 'user',
         content: msg.content,
@@ -297,9 +359,45 @@ export class HuggingFaceService {
   }
 
   /**
+   * List bot threads for admin
+   */
+  async listThreads(page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+    const [total, items] = await Promise.all([
+      this.prisma.aIThread.count(),
+      this.prisma.aIThread.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { messages: true } },
+          messages: { orderBy: { createdAt: 'asc' } }
+        }
+      })
+    ]);
+
+    return {
+      items,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  /**
    * Clear conversation
    */
-  clearConversation(conversationId: string): boolean {
-    return this.conversations.delete(conversationId);
+  async clearConversation(conversationId: string): Promise<boolean> {
+    try {
+      await this.prisma.aIMessage.deleteMany({ where: { threadId: conversationId } });
+      await this.prisma.aIThread.delete({ where: { id: conversationId } });
+      return true;
+    } catch (error) {
+      this.logger.error(`Error clearing conversation: ${error.message}`);
+      return false;
+    }
   }
 }

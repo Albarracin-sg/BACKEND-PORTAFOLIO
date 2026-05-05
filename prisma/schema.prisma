@@ -7,25 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  ADMIN
-  VIEWER
-}
-
-enum SectionType {
-  HERO
-  ABOUT
-  PROJECTS
-  CONTACT
-  STATS
-}
-
-enum MessageStatus {
-  RECEIVED
-  SENT
-  FAILED
-}
-
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -39,9 +20,9 @@ model User {
 model Session {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model Page {
@@ -49,24 +30,24 @@ model Page {
   slug        String    @unique
   title       String
   isPublished Boolean   @default(true)
-  sections    Section[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  sections    Section[]
 }
 
 model Section {
   id        String      @id @default(cuid())
   pageId    String
-  page      Page        @relation(fields: [pageId], references: [id])
   type      SectionType
   order     Int
   content   Json
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
+  page      Page        @relation(fields: [pageId], references: [id])
 }
 
 model Project {
-  id           String               @id @default(cuid())
+  id           String              @id @default(cuid())
   title        String
   description  String
   problem      String
@@ -77,19 +58,19 @@ model Project {
   liveUrl      String?
   category     String
   status       String
-  featured     Boolean              @default(false)
-  stars        Int                  @default(0)
-  forks        Int                  @default(0)
-  views        Int                  @default(0)
+  featured     Boolean             @default(false)
+  stars        Int                 @default(0)
+  forks        Int                 @default(0)
+  views        Int                 @default(0)
   date         DateTime
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
   technologies ProjectTechnology[]
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
 }
 
 model Technology {
-  id       String               @id @default(cuid())
-  name     String               @unique
+  id       String              @id @default(cuid())
+  name     String              @unique
   projects ProjectTechnology[]
 }
 
@@ -106,11 +87,11 @@ model ContactMessage {
   id        String        @id @default(cuid())
   name      String
   email     String
-  company   String?
-  subject   String
   message   String
   status    MessageStatus @default(RECEIVED)
   createdAt DateTime      @default(now())
+  company   String?
+  subject   String
 }
 
 model GitHubRepoCache {
@@ -148,19 +129,19 @@ model Persona {
 model AIThread {
   id        String      @id @default(cuid())
   personaId String
-  persona   Persona     @relation(fields: [personaId], references: [id])
   title     String?
   createdAt DateTime    @default(now())
   messages  AIMessage[]
+  persona   Persona     @relation(fields: [personaId], references: [id])
 }
 
 model AIMessage {
   id        String   @id @default(cuid())
   threadId  String
-  thread    AIThread @relation(fields: [threadId], references: [id])
   role      String
   content   String
   createdAt DateTime @default(now())
+  thread    AIThread @relation(fields: [threadId], references: [id])
 }
 
 model Media {
@@ -188,4 +169,23 @@ model ServerMetric {
   key       String   @id
   value     Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum SectionType {
+  HERO
+  ABOUT
+  PROJECTS
+  CONTACT
+  STATS
+}
+
+enum MessageStatus {
+  RECEIVED
+  SENT
+  FAILED
 }
