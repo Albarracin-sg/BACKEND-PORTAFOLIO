@@ -1,4 +1,4 @@
-import { Injectable, Logger, HttpException, HttpStatus, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { BOT_PERSONALITY } from '../../../config/prompts/bot.personality';
@@ -370,10 +370,11 @@ export class HuggingFaceService implements OnModuleInit {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
+          persona: { select: { id: true, name: true } },
           _count: { select: { messages: true } },
-          messages: { orderBy: { createdAt: 'asc' } }
-        }
-      })
+          messages: { orderBy: { createdAt: 'asc' } },
+        },
+      }),
     ]);
 
     return {
@@ -382,9 +383,25 @@ export class HuggingFaceService implements OnModuleInit {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
+  }
+
+  async getThreadMessages(threadId: string) {
+    const thread = await this.prisma.aIThread.findUnique({
+      where: { id: threadId },
+      select: { id: true },
+    });
+
+    if (!thread) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    return this.prisma.aIMessage.findMany({
+      where: { threadId },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   /**

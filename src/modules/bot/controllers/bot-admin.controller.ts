@@ -33,6 +33,12 @@ export class BotAdminController {
     return this.huggingFaceService.listThreads(page, limit);
   }
 
+  @Get('threads/:id/messages')
+  @HttpCode(HttpStatus.OK)
+  async listThreadMessages(@Param('id') id: string) {
+    return this.huggingFaceService.getThreadMessages(id);
+  }
+
   @Delete('threads/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteThread(@Param('id') id: string) {
