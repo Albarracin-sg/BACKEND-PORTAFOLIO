@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
   Delete,
   Param,
+  Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
@@ -29,8 +30,21 @@ export class BotAdminController {
   async listThreads(
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 10,
+    @Query('q') q?: string,
   ) {
-    return this.huggingFaceService.listThreads(page, limit);
+    return this.huggingFaceService.listThreads(page, limit, q);
+  }
+
+  @Post('threads/:id/analyze')
+  @HttpCode(HttpStatus.OK)
+  async analyzeThread(@Param('id') id: string) {
+    return this.huggingFaceService.analyzeThread(id);
+  }
+
+  @Post('threads/analyze')
+  @HttpCode(HttpStatus.OK)
+  async analyzeBulkThreads(@Query('q') q?: string) {
+    return this.huggingFaceService.analyzeBulkThreads(q);
   }
 
   @Get('threads/:id/messages')

@@ -127,12 +127,16 @@ model Persona {
 }
 
 model AIThread {
-  id        String      @id @default(cuid())
-  personaId String
-  title     String?
-  createdAt DateTime    @default(now())
-  messages  AIMessage[]
-  persona   Persona     @relation(fields: [personaId], references: [id])
+  id             String      @id @default(cuid())
+  personaId      String
+  title          String?
+  isAnalyzed     Boolean     @default(false)
+  analysisResult String?
+  createdAt      DateTime    @default(now())
+  messages       AIMessage[]
+  persona        Persona     @relation(fields: [personaId], references: [id])
+
+  @@index([isAnalyzed])
 }
 
 model AIMessage {

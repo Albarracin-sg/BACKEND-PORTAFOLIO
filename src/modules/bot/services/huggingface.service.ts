@@ -361,18 +361,35 @@ export class HuggingFaceService implements OnModuleInit {
   /**
    * List bot threads for admin
    */
-  async listThreads(page = 1, limit = 10) {
+  async listThreads(page = 1, limit = 10, q = '') {
     const skip = (page - 1) * limit;
+    
+    // Filtramos por defecto las que NO están analizadas, a menos que haya una búsqueda específica
+    const where: any = {
+      isAnalyzed: false,
+    };
+
+    if (q) {
+      where.OR = [
+        { id: { contains: q, mode: 'insensitive' as any } },
+        { title: { contains: q, mode: 'insensitive' as any } },
+        { messages: { some: { content: { contains: q, mode: 'insensitive' as any } } } },
+      ];
+      // Si hay búsqueda, permitimos ver analizadas para que el usuario las encuentre si quiere
+      delete where.isAnalyzed;
+    }
+
     const [total, items] = await Promise.all([
-      this.prisma.aIThread.count(),
+      this.prisma.aIThread.count({ where }),
       this.prisma.aIThread.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
           persona: { select: { id: true, name: true } },
           _count: { select: { messages: true } },
-          messages: { orderBy: { createdAt: 'asc' } },
+          messages: { orderBy: { createdAt: 'asc' }, take: 1 },
         },
       }),
     ]);
@@ -386,6 +403,155 @@ export class HuggingFaceService implements OnModuleInit {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Analyze a thread and provide feedback
+   */
+  async analyzeThread(threadId: string) {
+    const thread = await this.prisma.aIThread.findUnique({
+      where: { id: threadId },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' } },
+        persona: true,
+      },
+    });
+
+    if (!thread) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    // Si ya está analizada, devolvemos el cache para ahorrar guita y tiempo
+    if (thread.isAnalyzed && thread.analysisResult) {
+      return { analysis: thread.analysisResult };
+    }
+
+    if (thread.messages.length === 0) {
+      return { analysis: 'No messages to analyze.' };
+    }
+
+    const apiUrl = this.configService.get<string>('HUGGINGFACE_API_URL');
+    const model = this.configService.get<string>('HUGGINGFACE_MODEL');
+    const apiKey = this.configService.get<string>('HUGGINGFACE_API_KEY');
+
+    const conversationText = thread.messages
+      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+      .join('\n');
+
+    const analysisPrompt = `Sos un Analista Senior de UX y Especialista en LLMs. 
+Tu objetivo es auditar la siguiente conversación entre un Usuario y el Bot de Juan Camilo.
+Juan Camilo es un desarrollador Fullstack apasionado por el Backend.
+
+Analizá y devolvé un reporte crítico en Markdown con:
+
+1. **Diagnóstico de Empatía**: ¿El bot captó el tono del usuario?
+2. **Fallas de Resolución**: Identificá exactamente qué no pudo responder o dónde fue vago.
+3. **Desvíos de Persona**: ¿Se salió del personaje de Juan Camilo?
+4. **PLAN DE MEJORA TÉCNICA**: 
+   - ¿Qué datos faltan en el contexto para que responda mejor?
+   - ¿Qué cambios sugerís en el "System Prompt" para evitar errores vistos aquí?
+   - ¿Qué nuevas funcionalidades o secciones debería tener el portafolio para resolver estas dudas?
+
+Sé directo, crítico y profesional. Respondé en español rioplatense (voseo) para que Juan lo sienta cercano.
+
+CONVERSACIÓN A ANALIZAR:
+${conversationText}`;
+
+    const chatMessages = [
+      { role: 'system', content: 'You are a professional conversation analyst.' },
+      { role: 'user', content: analysisPrompt },
+    ];
+
+    try {
+      const response = await this.callHuggingFace(apiUrl!, model!, apiKey!, chatMessages, 1024, 60000);
+      const analysis = this.extractChatReply(response);
+
+      // Guardamos el resultado y marcamos como analizada
+      await this.prisma.aIThread.update({
+        where: { id: threadId },
+        data: {
+          isAnalyzed: true,
+          analysisResult: analysis,
+        },
+      });
+
+      return { analysis };
+    } catch (error) {
+      this.logger.error(`Error analyzing thread: ${error.message}`);
+      throw new HttpException('Failed to analyze conversation', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+  }
+
+  /**
+   * Analyze multiple threads at once
+   */
+  async analyzeBulkThreads(q = '') {
+    const where: any = {
+      isAnalyzed: false,
+    };
+
+    if (q) {
+      where.OR = [
+        { id: { contains: q, mode: 'insensitive' as any } },
+        { title: { contains: q, mode: 'insensitive' as any } },
+        { messages: { some: { content: { contains: q, mode: 'insensitive' as any } } } },
+      ];
+    }
+
+    const threads = await this.prisma.aIThread.findMany({
+      where,
+      take: 20, 
+      orderBy: { createdAt: 'desc' },
+      include: { messages: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    if (threads.length === 0) {
+      return { analysis: 'No hay conversaciones nuevas para analizar.' };
+    }
+
+    const apiUrl = this.configService.get<string>('HUGGINGFACE_API_URL');
+    const model = this.configService.get<string>('HUGGINGFACE_MODEL');
+    const apiKey = this.configService.get<string>('HUGGINGFACE_API_KEY');
+
+    const summaryText = threads
+      .map((t, i) => `--- CONVERSACIÓN ${i + 1} (${t.title || 'Sin título'}) ---\n${t.messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}`)
+      .join('\n\n');
+
+    const analysisPrompt = `Sos un Arquitecto de IA y Consultor de Estrategia Digital.
+Analizá este lote de ${threads.length} conversaciones.
+
+Tu misión es identificar patrones y dar un informe ejecutivo en Markdown:
+
+1. **Top Temas**: ¿De qué habla la gente?
+2. **Puntos de Fricción**: ¿Dónde el bot está fallando sistemáticamente?
+3. **Oportunidades de Conversión**: ¿Qué está pidiendo el usuario que Juan Camilo podría capitalizar?
+4. **RECOMENDACIONES ESTRATÉGICAS**: Cambios técnicos inmediatos y de contenido.
+
+Sé crudo. Respondé en español (voseo).
+
+CONVERSACIONES:
+${summaryText}`;
+
+    const chatMessages = [
+      { role: 'system', content: 'Sos un analista de IA senior.' },
+      { role: 'user', content: analysisPrompt },
+    ];
+
+    try {
+      const response = await this.callHuggingFace(apiUrl!, model!, apiKey!, chatMessages, 1536, 90000);
+      const analysis = this.extractChatReply(response);
+
+      // Marcamos todas como analizadas (bulk update)
+      await this.prisma.aIThread.updateMany({
+        where: { id: { in: threads.map(t => t.id) } },
+        data: { isAnalyzed: true },
+      });
+
+      return { analysis };
+    } catch (error) {
+      this.logger.error(`Error in bulk analysis: ${error.message}`);
+      throw new HttpException('Falla en análisis masivo', HttpStatus.SERVICE_UNAVAILABLE);
+    }
   }
 
   async getThreadMessages(threadId: string) {
