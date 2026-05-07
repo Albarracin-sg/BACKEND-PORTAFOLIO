@@ -64,7 +64,18 @@ export class ProjectsService {
       conditions.push({
         OR: [
           { title: { contains: query.search, mode: 'insensitive' } },
-          { description: { contains: query.search, mode: 'insensitive' } },
+          {
+            description: {
+              path: ['es'],
+              string_contains: query.search,
+            },
+          },
+          {
+            description: {
+              path: ['en'],
+              string_contains: query.search,
+            },
+          },
         ],
       });
     }
@@ -123,7 +134,18 @@ export class ProjectsService {
             ? {
                 OR: [
                   { title: { contains: search, mode: 'insensitive' } },
-                  { description: { contains: search, mode: 'insensitive' } },
+                  {
+                    description: {
+                      path: ['es'],
+                      string_contains: search,
+                    },
+                  },
+                  {
+                    description: {
+                      path: ['en'],
+                      string_contains: search,
+                    },
+                  },
                   {
                     technologies: {
                       some: {
@@ -177,10 +199,10 @@ export class ProjectsService {
         await this.prisma.project.create({
           data: {
             title: repo.name,
-            description: repo.description ?? 'Repositorio publico en GitHub',
-            problem: '',
-            challenge: '',
-            solution: '',
+            description: { es: repo.description ?? 'Repositorio público en GitHub', en: repo.description ?? 'Public repository on GitHub' },
+            problem: { es: '', en: '' },
+            challenge: { es: '', en: '' },
+            solution: { es: '', en: '' },
             imageUrl: `https://opengraph.githubassets.com/1/${repo.owner.login}/${repo.name}`,
             githubUrl: repo.html_url,
             liveUrl: repo.homepage || null,
@@ -289,15 +311,27 @@ export class ProjectsService {
       });
 
       if (data.technologies) {
+        // 1. Borrar asociaciones viejas
         await tx.projectTechnology.deleteMany({ where: { projectId: id } });
-        for (const name of data.technologies) {
-          const tech = await tx.technology.upsert({
+        
+        // 2. Asegurar que todas las tecnologías existan (concurrentemente)
+        const techPromises = data.technologies.map(name => 
+          tx.technology.upsert({
             where: { name },
             update: {},
             create: { name },
-          });
-          await tx.projectTechnology.create({
-            data: { projectId: id, technologyId: tech.id },
+          })
+        );
+        const techs = await Promise.all(techPromises);
+
+        // 3. Crear las nuevas asociaciones en batch
+        if (techs.length > 0) {
+          await tx.projectTechnology.createMany({
+            data: techs.map(t => ({
+              projectId: id,
+              technologyId: t.id,
+            })),
+            skipDuplicates: true,
           });
         }
       }
@@ -306,6 +340,8 @@ export class ProjectsService {
         where: { id: project.id },
         include: { technologies: { include: { technology: true } } },
       });
+    }, {
+      timeout: 10000, // 10 segundos para evitar timeouts en operaciones pesadas
     });
   }
 

@@ -49,10 +49,10 @@ model Section {
 model Project {
   id           String              @id @default(cuid())
   title        String
-  description  String
-  problem      String
-  challenge    String
-  solution     String
+  description  Json
+  problem      Json
+  challenge    Json
+  solution     Json
   imageUrl     String
   githubUrl    String
   liveUrl      String?

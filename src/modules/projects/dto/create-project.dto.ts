@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsDateString, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateProjectDto {
   @ApiProperty()
@@ -7,20 +7,20 @@ export class CreateProjectDto {
   title: string;
 
   @ApiProperty()
-  @IsString()
-  description: string;
+  @IsObject()
+  description: Record<string, string>;
 
   @ApiProperty()
-  @IsString()
-  problem: string;
+  @IsObject()
+  problem: Record<string, string>;
 
   @ApiProperty()
-  @IsString()
-  challenge: string;
+  @IsObject()
+  challenge: Record<string, string>;
 
   @ApiProperty()
-  @IsString()
-  solution: string;
+  @IsObject()
+  solution: Record<string, string>;
 
   @ApiProperty()
   @IsString()
