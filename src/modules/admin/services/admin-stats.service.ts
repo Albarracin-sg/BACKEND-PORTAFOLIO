@@ -96,7 +96,13 @@ export class AdminStatsService implements OnModuleInit, OnModuleDestroy {
    * Record a request in the database
    */
   async recordRequest(method: string, path: string, status: number, responseTime: number, ip?: string, userAgent?: string) {
+    // Ignorar ruidos (endpoints que se llaman frecuentemente por polling)
+    if (path.includes('spotify/now-playing') || path.includes('health')) {
+      return;
+    }
+
     // Fire-and-forget: No await para no bloquear la respuesta HTTP
+    // Pero lo envolvemos para que si el pool está lleno, no ensucie el log gigante
     void this.prisma.requestLog.create({
       data: {
         method,
@@ -107,7 +113,12 @@ export class AdminStatsService implements OnModuleInit, OnModuleDestroy {
         userAgent,
       },
     }).catch((error) => {
-      this.logger.error(`Error recording request log: ${error.message}`);
+      // Si es un error de pool de conexiones, logueamos algo corto una sola vez
+      if (error.message.includes('connection pool')) {
+        this.logger.warn(`⚠️ DB Connection Pool is full. Skipping request log for ${path}`);
+      } else {
+        this.logger.error(`Error recording request log: ${error.message.substring(0, 100)}...`);
+      }
     });
   }
 
@@ -221,6 +232,11 @@ export class AdminStatsService implements OnModuleInit, OnModuleDestroy {
         by: ['method', 'path'],
         where: {
           timestamp: { gte: retentionCutoff },
+          // Excluir ruidos de la agregación visual
+          NOT: [
+            { path: { contains: 'spotify/now-playing' } },
+            { path: { contains: 'health' } }
+          ]
         },
         _count: {
           id: true

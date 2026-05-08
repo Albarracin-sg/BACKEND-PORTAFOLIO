@@ -39,8 +39,10 @@ export async function configureApp(app: NestExpressApplication) {
   
   // Debug: allow all origins temporarily
   app.enableCors({
-    origin: true, // Allow all for debugging
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization',
   });
 
   app.useGlobalPipes(
