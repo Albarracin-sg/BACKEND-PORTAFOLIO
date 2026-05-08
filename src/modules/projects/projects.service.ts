@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { GithubService } from '../github/github.service';
+import { AiService } from '../ai/ai.service';
 import { Prisma } from '@prisma/client';
 
 interface ProjectQuery {
@@ -15,12 +16,14 @@ interface ProjectQuery {
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
   private cache: { value: any; expiresAt: number } | null = null;
   private readonly CACHE_TTL_MS = 300000; // 5 minutos
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly githubService: GithubService,
+    private readonly aiService: AiService,
   ) {}
 
   async listPublicProjects(query: ProjectQuery) {
@@ -106,8 +109,6 @@ export class ProjectsService {
   async listPublicProjectsOld(query: ProjectQuery) {
     const { search, category, tech, sortBy = 'date', sortOrder = 'desc' } = query;
 
-    // REMOVIDO: await this.syncGithubProjects().catch(() => null); // ESTO ERA EL PROBLEMA!
-
     const orderBy =
       sortBy === 'name'
         ? { title: sortOrder }
@@ -184,40 +185,87 @@ export class ProjectsService {
         include: { technologies: { include: { technology: true } } },
       });
 
+      const lastPush = new Date(repo.pushed_at ?? repo.updated_at);
+
       if (!existing) {
-        const technologies = [repo.language, ...(repo.topics ?? [])]
-          .filter((value): value is string => Boolean(value))
-          .map((name) => ({
-            technology: {
-              connectOrCreate: {
-                where: { name },
-                create: { name },
-              },
+        this.logger.log(`🆕 New project: ${repo.name}. Enriching...`);
+        const repoExtraInfo = await this.getRepoExtraInfo(repo);
+        const aiEnrichment = await this.enrichProjectWithAi(repo, repoExtraInfo);
+        
+        const techNames = Array.from(new Set([
+          repo.language,
+          ...(repo.topics ?? []),
+          ...(aiEnrichment.technologies ?? [])
+        ])).filter((t): t is string => Boolean(t));
+
+        const technologies = techNames.map((name) => ({
+          technology: {
+            connectOrCreate: {
+              where: { name },
+              create: { name },
             },
-          }));
+          },
+        }));
 
         await this.prisma.project.create({
           data: {
             title: repo.name,
-            description: { es: repo.description ?? 'Repositorio público en GitHub', en: repo.description ?? 'Public repository on GitHub' },
-            problem: { es: '', en: '' },
-            challenge: { es: '', en: '' },
-            solution: { es: '', en: '' },
+            description: aiEnrichment.description || { es: repo.description ?? 'Repositorio público en GitHub', en: repo.description ?? 'Public repository on GitHub' },
+            problem: aiEnrichment.problem || { es: '', en: '' },
+            challenge: aiEnrichment.challenge || { es: '', en: '' },
+            solution: aiEnrichment.solution || { es: '', en: '' },
             imageUrl: `https://opengraph.githubassets.com/1/${repo.owner.login}/${repo.name}`,
             githubUrl: repo.html_url,
             liveUrl: repo.homepage || null,
-            category: 'web',
+            category: aiEnrichment.category || 'web',
             status: repo.archived ? 'prototype' : 'production',
             featured: featuredIds.has(repo.id),
             stars: repo.stargazers_count ?? 0,
             forks: repo.forks_count ?? 0,
             views: 0,
-            date: new Date(repo.pushed_at ?? repo.updated_at),
+            date: lastPush,
             technologies: technologies.length > 0 ? { create: technologies } : undefined,
           },
         });
         created += 1;
         continue;
+      }
+
+      // SMART SYNC: Solo IA si no hay contenido detallado O si el repo cambió
+      const hasDetailedContent = existing.problem && (existing.problem as any).en !== '';
+      const isOutdated = existing.date.getTime() !== lastPush.getTime();
+      
+      let aiEnrichment: any = null;
+
+      if (!hasDetailedContent || isOutdated) {
+        this.logger.log(`🔄 Re-enriching ${repo.name} (Changed or Empty)...`);
+        const repoExtraInfo = await this.getRepoExtraInfo(repo);
+        aiEnrichment = await this.enrichProjectWithAi(repo, repoExtraInfo);
+      } else {
+        this.logger.log(`⏩ Skipping enrichment for ${repo.name} (Up to date)`);
+      }
+
+      if (aiEnrichment?.technologies) {
+        await this.prisma.projectTechnology.deleteMany({ where: { projectId: existing.id } });
+        const techNames = Array.from(new Set([
+          repo.language,
+          ...(repo.topics ?? []),
+          ...(aiEnrichment.technologies ?? [])
+        ])).filter((t): t is string => Boolean(t));
+
+        for (const name of techNames) {
+          await this.prisma.projectTechnology.create({
+            data: {
+              project: { connect: { id: existing.id } },
+              technology: {
+                connectOrCreate: {
+                  where: { name },
+                  create: { name },
+                },
+              },
+            },
+          });
+        }
       }
 
       await this.prisma.project.update({
@@ -228,14 +276,80 @@ export class ProjectsService {
             `https://opengraph.githubassets.com/1/${repo.owner.login}/${repo.name}`,
           stars: repo.stargazers_count ?? existing.stars,
           forks: repo.forks_count ?? existing.forks,
-          date: new Date(repo.pushed_at ?? repo.updated_at),
+          date: lastPush,
           liveUrl: repo.homepage || existing.liveUrl,
+          category: aiEnrichment?.category || existing.category,
+          ...(aiEnrichment?.problem ? {
+            description: aiEnrichment.description,
+            problem: aiEnrichment.problem,
+            challenge: aiEnrichment.challenge,
+            solution: aiEnrichment.solution,
+          } : {})
         },
       });
       updated += 1;
     }
 
     return { total: repos.length, created, updated };
+  }
+
+  private async getRepoExtraInfo(repo: any) {
+    const [readme, packageJson, tree] = await Promise.all([
+      this.githubService.getRepoFile(repo.owner.login, repo.name, 'README.md'),
+      this.githubService.getRepoFile(repo.owner.login, repo.name, 'package.json'),
+      this.githubService.getRepoTree(repo.owner.login, repo.name),
+    ]);
+
+    return {
+      readme: readme?.substring(0, 3000), // Limitamos para no matar el contexto
+      packageJson: packageJson ? JSON.parse(packageJson) : null,
+      fileList: tree?.tree?.slice(0, 50).map((f: any) => f.path).join(', '),
+    };
+  }
+
+  private async enrichProjectWithAi(repo: any, extra: any) {
+    this.logger.log(`🤖 Enriching project ${repo.name} with AI (Full Analysis)...`);
+    
+    const prompt = `You are a Senior Software Architect. Analyze this GitHub repository and generate professional content and metadata for a portfolio.
+    
+REPOSITORY: ${repo.name}
+DESCRIPTION: ${repo.description}
+TECH STACK (GitHub): ${repo.language}, ${repo.topics?.join(', ')}
+FILE LIST: ${extra.fileList}
+PACKAGE JSON: ${extra.packageJson ? JSON.stringify(extra.packageJson).substring(0, 1000) : 'N/A'}
+README SNIPPET: ${extra.readme}
+
+OUTPUT FORMAT (JSON ONLY):
+{
+  "description": { "en": "...", "es": "..." },
+  "problem": { "en": "...", "es": "..." },
+  "challenge": { "en": "...", "es": "..." },
+  "solution": { "en": "...", "es": "..." },
+  "category": "web | ai | automation | mobile | tool | library | education",
+  "technologies": ["Tech1", "Tech2", "Tech3", ...]
+}
+
+GUIDELINES:
+- Spanish must use "voseo" (Juan Camilo persona style).
+- "category": Choose the most appropriate one from the list provided.
+- "technologies": Identify ALL relevant technologies by looking at dependencies in package.json and file list. Include frameworks, libraries, databases, and languages.
+- Be precise, technical, and concise.`;
+
+    try {
+      const response = await this.aiService.callModel([
+        { role: 'system', content: 'You are a professional technical architect and writer.' },
+        { role: 'user', content: prompt }
+      ]);
+
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      return {};
+    } catch (error) {
+      this.logger.error(`Failed to enrich project ${repo.name}: ${error.message}`);
+      return {};
+    }
   }
 
   async getProject(id: string) {

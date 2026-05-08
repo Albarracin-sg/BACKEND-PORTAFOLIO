@@ -211,6 +211,33 @@ export class GithubService {
     return response.json() as Promise<T>;
   }
 
+  async getRepoFile(owner: string, repo: string, path: string): Promise<string | null> {
+    try {
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+      const content: any = await this.fetchJson(url);
+      if (content && content.content && content.encoding === 'base64') {
+        return Buffer.from(content.content, 'base64').toString('utf-8');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getRepoTree(owner: string, repo: string, branch = 'main'): Promise<any> {
+    try {
+      const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+      return await this.fetchJson(url);
+    } catch {
+      try {
+        const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/master?recursive=1`;
+        return await this.fetchJson(url);
+      } catch {
+        return null;
+      }
+    }
+  }
+
   private hasToken() {
     return Boolean(this.config.get<string>('GITHUB_TOKEN'));
   }
