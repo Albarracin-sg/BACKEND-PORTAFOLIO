@@ -27,6 +27,12 @@ jobs:
       PORT: 3000
       ADMIN_EMAIL: admin@test.com
       ADMIN_PASSWORD: password
+      SMTP_HOST: ${{ secrets.SMTP_HOST || 'smtp.test.com' }}
+      SMTP_USER: ${{ secrets.SMTP_USER || 'test' }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS || 'test' }}
+      MAIL_FROM: ${{ secrets.MAIL_FROM || 'test@test.com' }}
+      GITHUB_USERNAME: ${{ secrets.GITHUB_USERNAME || 'test' }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN || 'test' }}
 
     steps:
       - name: Checkout code
