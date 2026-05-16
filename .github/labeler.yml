@@ -1,16 +1,22 @@
 area/backend:
-  - src/**/*
+  - any:
+    - src/**/*
 area/infra:
-  - infra/**/*
+  - any:
+    - infra/**/*
 area/ops:
-  - ops/**/*
+  - any:
+    - ops/**/*
 area/data:
-  - prisma/**/*
+  - any:
+    - prisma/**/*
 area/deps:
-  - package.json
-  - pnpm-lock.yaml
+  - any:
+    - package.json
+    - pnpm-lock.yaml
 area/config:
-  - .github/**/*
-  - nest-cli.json
-  - tsconfig.json
-  - biome.json
+  - any:
+    - .github/**/*
+    - nest-cli.json
+    - tsconfig.json
+    - biome.json
