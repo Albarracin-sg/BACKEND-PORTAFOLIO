@@ -1,6 +1,4 @@
 #!/bin/sh
 . "$(dirname "$0")/_/husky.sh"
 
-echo "Running pre-push checks..."
-pnpm exec tsc --noEmit
-pnpm test
+echo "✅ All checks run in pre-commit. Nothing to validate here."

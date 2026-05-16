@@ -4,6 +4,7 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { GithubService } from '../github/github.service';
 import { AiService } from '../ai/ai.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { Prisma } from '@prisma/client';
 
 interface ProjectQuery {
@@ -24,6 +25,7 @@ export class ProjectsService {
     private readonly prisma: PrismaService,
     private readonly githubService: GithubService,
     private readonly aiService: AiService,
+    private readonly metricsService: MetricsService,
   ) {}
 
   async listPublicProjects(query: ProjectQuery) {
@@ -290,6 +292,7 @@ export class ProjectsService {
       updated += 1;
     }
 
+    this.metricsService.recordGithubSyncSuccess();
     return { total: repos.length, created, updated };
   }
 

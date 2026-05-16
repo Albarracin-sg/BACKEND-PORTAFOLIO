@@ -13,6 +13,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { SpotifyModule } from './modules/spotify/spotify.module';
 import { BotModule } from './modules/bot/bot.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 import { validateEnv } from './config/env.schema';
@@ -34,6 +35,7 @@ import { validateEnv } from './config/env.schema';
     MailModule,
     BotModule,
     AdminModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

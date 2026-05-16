@@ -1,13 +1,19 @@
 FROM node:22-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ENV HUSKY=0
 RUN corepack enable && apk add --no-cache openssl libc6-compat
 WORKDIR /app
 
 FROM base AS dependencies
 COPY package.json pnpm-lock.yaml ./
+# Fix for Prisma + pnpm in Docker
+RUN echo "node-linker=hoisted" > .npmrc
 COPY prisma ./prisma/
-RUN pnpm install --frozen-lockfile
+# Prisma and other engines need their post-install scripts
+RUN pnpm install --frozen-lockfile --ignore-scripts && \
+    pnpm approve-builds && \
+    pnpm install --frozen-lockfile
 
 FROM base AS builder
 COPY . .
