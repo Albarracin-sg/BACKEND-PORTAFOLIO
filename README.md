@@ -1,84 +1,55 @@
-# 🚀 Portfolio CMS Backend
+# Portfolio CMS Backend
 
-Este es el núcleo de mi portafolio profesional. Una API robusta, escalable y segura construida con **NestJS**, diseñada para gestionar contenido, proyectos, mensajes de contacto y archivos multimedia de manera eficiente.
+Nucleo del portafolio. API con **NestJS** para gestionar contenido, proyectos, mensajes de contacto y archivos multimedia.
 
-## 🛠️ Stack Tecnológico
+## Stack
 
-- **Framework:** [NestJS](https://nestjs.com/) (Node.js)
-- **Lenguaje:** TypeScript
-- **Base de Datos:** PostgreSQL
-- **ORM:** [Prisma](https://www.prisma.io/)
-- **Documentación:** [Swagger/OpenAPI](https://swagger.io/)
-- **Seguridad:** JWT + Roles (Admin/User)
-- **Correo:** Nodemailer + Handlebars (Templates dinámicos)
-- **Multimedia:** Soporte para Local Storage y AWS S3
-- **Validación:** Class-validator & Class-transformer
-- **Contenedores:** Docker & Docker Compose
+- **Framework**: NestJS (Node.js)
+- **Language**: TypeScript
+- **Database**: PostgreSQL
+- **ORM**: Prisma
+- **Docs**: Swagger / OpenAPI
+- **Auth**: JWT + Roles (Admin/User)
+- **Email**: Nodemailer + Handlebars
+- **Storage**: Local / AWS S3
+- **Validation**: class-validator + class-transformer
+- **Containers**: Docker + Docker Compose
+- **Package**: pnpm
 
-## ✨ Características Principales
+## Features
 
-- **Gestión de Proyectos:** CRUD completo con soporte para categorías, tecnologías, estadísticas de GitHub y destacados.
-- **Sistema de Contacto:** Recepción de mensajes con validación estricta y notificaciones automáticas por mail tanto al admin como al usuario.
-- **CMS de Contenido:** Manejo dinámico de secciones y páginas para el frontend.
-- **Búnker de Multimedia:** Sistema de carga de archivos con filtros de seguridad (MIME types, tamaño) y generación de nombres únicos.
-- **Validación E2E:** Pipes globales que aseguran que no entre "basura" al sistema (`whitelist`, `forbidNonWhitelisted`).
-- **Arquitectura Modular:** Código organizado por dominios, fácil de mantener y testear.
+- **Projects** — CRUD, categories, technologies, GitHub stats, featured
+- **Contact** — receive messages, strict validation, auto-reply email
+- **CMS** — dynamic sections and pages for the frontend
+- **Media** — file upload with MIME/size validation, unique names
+- **Auth** — admin login, role-based access control
+- **Validation** — global pipes, whitelist, forbidNonWhitelisted
+- **Stats** — endpoint analytics, request logging
 
-## 🚀 Instalación Rápida
+## Quick Start
 
-### Requisitos previos
+```bash
+pnpm install
+cp .env.example .env   # configurar credenciales
+docker-compose -f infra/docker/docker-compose.yml up -d   # base de datos
+npx prisma migrate dev
+pnpm run start:dev     # http://localhost:3000
+```
 
-- Node.js (v18+)
-- pnpm (recomendado)
-- Docker (opcional, para la base de datos)
+## API Docs
 
-### Pasos
+With the server running:
 
-1. **Clonar el repo:**
-   ```bash
-   git clone <tu-repo-url>
-   cd BACKEND-PORTAFOLIO
-   ```
+```
+http://localhost:3000/api/v1/docs
+```
 
-2. **Configurar variables de entorno:**
-   ```bash
-   cp .env.example .env
-   # Editá el .env con tus credenciales
-   ```
-
-3. **Instalar dependencias:**
-   ```bash
-   pnpm install
-   ```
-
-4. **Levantar la base de datos (Docker):**
-   ```bash
-   docker-compose -f infra/docker/docker-compose.yml up -d
-   ```
-
-5. **Correr migraciones de Prisma:**
-   ```bash
-   npx prisma migrate dev
-   ```
-
-6. **Iniciar en modo desarrollo:**
-   ```bash
-   pnpm run start:dev
-   ```
-
-## 📖 Documentación de la API
-
-Una vez que el servidor esté corriendo, podés explorar y probar todos los endpoints desde la interfaz de Swagger:
-
-🔗 `http://localhost:3000/api/v1/docs`
-
-## 🐳 Docker
-
-El proyecto está preparado para correr en contenedores. Podés construir la imagen de producción con:
+## Docker
 
 ```bash
 docker build -t portfolio-backend -f infra/docker/Dockerfile .
 ```
 
 ---
-Desarrollado con ❤️ por [Juan Albarracín](https://juanalbarracin.dev)
+
+Desarrollado por [Juan Albarracin](https://github.com/Albarracin-sg)
