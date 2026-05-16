@@ -44,7 +44,7 @@ jobs:
 
       - name: Get pnpm store directory
         shell: bash
-        run: Full-Stack Engineer (Backend Focus) 
+        run: |
           echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
       - name: Cache pnpm modules
