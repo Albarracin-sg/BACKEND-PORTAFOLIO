@@ -167,6 +167,10 @@ export class ProjectsService {
   }
 
   async syncGithubProjects() {
+    // Invalidar cache público antes del sync para que listPublicProjects
+    // devuelva datos frescos inmediatamente después del sync
+    this.cache = null;
+
     const repos = await this.githubService.listRepos({ forceRefresh: true });
     const sortedByStars = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count);
     const featuredIds = new Set(sortedByStars.slice(0, 3).map((repo) => repo.id));
