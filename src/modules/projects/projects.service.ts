@@ -167,7 +167,7 @@ export class ProjectsService {
   }
 
   async syncGithubProjects() {
-    const repos = await this.githubService.listRepos();
+    const repos = await this.githubService.listRepos({ forceRefresh: true });
     const sortedByStars = [...repos].sort((a, b) => b.stargazers_count - a.stargazers_count);
     const featuredIds = new Set(sortedByStars.slice(0, 3).map((repo) => repo.id));
     const repoUrls = repos.map((repo) => repo.html_url);

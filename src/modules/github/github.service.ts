@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 
 type GitHubRepo = {
   id: number;
@@ -63,6 +65,8 @@ export type GithubStats = {
   githubActivity: Array<{ day: string; commits: number }>;
 };
 
+const SUMMARY_CACHE_ID = 'github-stats-summary';
+
 @Injectable()
 export class GithubService {
   private repoCache: RepoCache | null = null;
@@ -70,29 +74,43 @@ export class GithubService {
   private inFlightRequest: Promise<GithubStats> | null = null;
   private lastError: string | null = null;
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
 
-  async listRepos(options?: { includePrivate?: boolean }) {
-    const repos = await this.fetchRepos();
+  async listRepos(options?: { includePrivate?: boolean; forceRefresh?: boolean }) {
+    const repos = await this.fetchRepos(options?.forceRefresh);
     return repos.filter((repo) => !repo.fork && (options?.includePrivate ? true : !repo.private));
   }
 
   async getStats(): Promise<GithubStats> {
-    // Cache válido
+    // L1: In-memory cache hit
     if (this.statsCache && this.statsCache.expiresAt > Date.now()) {
-      this.logger?.log('📦 GitHub stats cache hit');
+      this.logger?.log('📦 Stats L1 (mem) hit');
       return this.statsCache.value;
     }
 
-    // Request en progreso - esperar esa misma promesa
+    // Request en progreso — esperar esa misma promesa
     if (this.inFlightRequest) {
-      this.logger?.log('⏳ GitHub waiting for in-flight request');
+      this.logger?.log('⏳ Stats waiting for in-flight request');
       return this.inFlightRequest;
     }
 
-    // Crear nueva request
+    // L2: DB cache hit
+    const dbCached = await this.prisma.gitHubSummaryCache.findUnique({
+      where: { id: SUMMARY_CACHE_ID },
+    });
+    if (dbCached && this.isCacheFresh(dbCached.fetchedAt, dbCached.ttlSec)) {
+      const stats = dbCached.data as unknown as GithubStats;
+      this.statsCache = { value: stats, expiresAt: Date.now() + this.getCacheTtlMs() };
+      this.logger?.log('📦 Stats L2 (PG) hit');
+      return stats;
+    }
+
+    // Cache miss — crear nueva request
     this.inFlightRequest = this.fetchStatsWithFallback();
-    
+
     try {
       return await this.inFlightRequest;
     } finally {
@@ -104,7 +122,7 @@ export class GithubService {
     try {
       const startTime = Date.now();
       const stats = await this.fetchStats();
-      this.logger?.log(`🌐 GitHub external request: ${Date.now() - startTime}ms`);
+      this.logger?.log(`🌐 Stats external request: ${Date.now() - startTime}ms`);
       this.lastError = null;
       return stats;
     } catch (error) {
@@ -112,9 +130,22 @@ export class GithubService {
       this.logger?.warn(`⚠️ GitHub error: ${sanitizedError}`);
       this.lastError = sanitizedError;
 
-      // Devolver stale cache si existe
+      // Fallback 1: stale DB cache
+      try {
+        const stale = await this.prisma.gitHubSummaryCache.findUnique({
+          where: { id: SUMMARY_CACHE_ID },
+        });
+        if (stale) {
+          this.logger?.log('♻️ Stats fallback → stale PG cache');
+          return stale.data as unknown as GithubStats;
+        }
+      } catch {
+        // DB error, continue
+      }
+
+      // Fallback 2: stale in-memory
       if (this.statsCache) {
-        this.logger?.log('♻️ Fallback to stale cache');
+        this.logger?.log('♻️ Stats fallback → stale mem cache');
         return this.statsCache.value;
       }
 
@@ -133,7 +164,6 @@ export class GithubService {
   }
 
   private get logger() {
-    // Logger lazy para evitar problemas de inicialización
     try {
       const { Logger } = require('@nestjs/common');
       return new Logger('GithubService');
@@ -178,8 +208,26 @@ export class GithubService {
       githubActivity,
     };
 
+    // Guardar en L2 (DB) y L1 (mem)
+    await this.saveStatsCache(stats);
     this.statsCache = { value: stats, expiresAt: Date.now() + this.getCacheTtlMs() };
     return stats;
+  }
+
+  private async saveStatsCache(stats: GithubStats) {
+    try {
+      const ttlSec = this.getCacheTtlSec();
+      const fetchedAt = new Date();
+      const data = stats as unknown as Prisma.InputJsonValue;
+      await this.prisma.gitHubSummaryCache.upsert({
+        where: { id: SUMMARY_CACHE_ID },
+        update: { data, fetchedAt, ttlSec },
+        create: { id: SUMMARY_CACHE_ID, data, fetchedAt, ttlSec },
+      });
+      this.logger?.log('💾 Stats saved to PG cache');
+    } catch (error) {
+      this.logger?.warn(`⚠️ Failed to save stats cache: ${error}`);
+    }
   }
 
   private getUsername() {
@@ -189,6 +237,14 @@ export class GithubService {
   private getCacheTtlMs() {
     const ttlMinutes = Number(this.config.get('GITHUB_CACHE_TTL_MINUTES') ?? 30);
     return Math.max(ttlMinutes, 5) * 60 * 1000;
+  }
+
+  private getCacheTtlSec() {
+    return Math.ceil(this.getCacheTtlMs() / 1000);
+  }
+
+  private isCacheFresh(fetchedAt: Date, ttlSec: number): boolean {
+    return fetchedAt.getTime() + ttlSec * 1000 > Date.now();
   }
 
   private getHeaders(includeAuth = true) {
@@ -251,17 +307,41 @@ export class GithubService {
           return viewer;
         }
       } catch {
-        // Fallback to public profile if the token is invalid or belongs to another user.
+        // Fallback to public profile
       }
     }
     return this.fetchJson<GitHubUser>(`https://api.github.com/users/${username}`);
   }
 
-  private async fetchRepos(): Promise<GitHubRepo[]> {
-    if (this.repoCache && this.repoCache.expiresAt > Date.now()) {
+  private async fetchRepos(forceRefresh = false): Promise<GitHubRepo[]> {
+    // L1: In-memory cache
+    if (!forceRefresh && this.repoCache && this.repoCache.expiresAt > Date.now()) {
+      this.logger?.log('📦 Repos L1 (mem) hit');
       return this.repoCache.value;
     }
 
+    // L2: DB cache (GitHubRepoCache)
+    if (!forceRefresh) {
+      const username = this.getUsername();
+      const cachedRepos = await this.prisma.gitHubRepoCache.findMany({
+        where: { owner: username },
+      });
+
+      if (cachedRepos.length > 0) {
+        const allValid = cachedRepos.every((r) =>
+          this.isCacheFresh(r.fetchedAt, r.ttlSec),
+        );
+        if (allValid) {
+          const repos = cachedRepos.map((r) => r.data as unknown as GitHubRepo);
+          this.repoCache = { value: repos, expiresAt: Date.now() + this.getCacheTtlMs() };
+          this.logger?.log(`📦 Repos L2 (PG) hit: ${repos.length} repos`);
+          return repos;
+        }
+      }
+    }
+
+    // L3: Fetch from GitHub API (force cuando forceRefresh=true)
+    const username = this.getUsername();
     const perPage = 100;
     let page = 1;
     const repos: GitHubRepo[] = [];
@@ -276,8 +356,36 @@ export class GithubService {
       page += 1;
     }
 
+    // Guardar en DB cache (best-effort)
+    this.saveReposCache(username, repos);
+
+    // L1 actualizado
     this.repoCache = { value: repos, expiresAt: Date.now() + this.getCacheTtlMs() };
     return repos;
+  }
+
+  private async saveReposCache(username: string, repos: GitHubRepo[]) {
+    try {
+      const ttlSec = this.getCacheTtlSec();
+      const fetchedAt = new Date();
+      const ops = repos.map((repo) =>
+        this.prisma.gitHubRepoCache.upsert({
+          where: { owner_name: { owner: username, name: repo.name } },
+          update: { data: repo as unknown as Prisma.InputJsonValue, fetchedAt, ttlSec },
+          create: {
+            owner: username,
+            name: repo.name,
+            data: repo as unknown as Prisma.InputJsonValue,
+            fetchedAt,
+            ttlSec,
+          },
+        }),
+      );
+      await Promise.all(ops);
+      this.logger?.log(`💾 ${repos.length} repos saved to PG cache`);
+    } catch (error) {
+      this.logger?.warn(`⚠️ Failed to save repos cache: ${error}`);
+    }
   }
 
   private getReposUrl(page: number, perPage: number) {
@@ -400,7 +508,9 @@ export class GithubService {
 
     const sinceIso = `${days[0]?.key}T00:00:00Z`;
     const activeRepos = repos.filter((repo) => repo.pushed_at && repo.archived === false);
-    const commitsByRepo = await Promise.all(activeRepos.map((repo) => this.fetchRepoCommits(repo, sinceIso)));
+    const commitsByRepo = await Promise.all(
+      activeRepos.map((repo) => this.fetchRepoCommits(repo, sinceIso)),
+    );
 
     for (const commits of commitsByRepo) {
       for (const commit of commits) {
