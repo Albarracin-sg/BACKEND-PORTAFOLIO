@@ -66,6 +66,8 @@ model Project {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
   technologies ProjectTechnology[]
+  articles    Article[]
+  diagrams    ArchitectureDiagram[]
 }
 
 model Technology {
@@ -81,6 +83,36 @@ model ProjectTechnology {
   technology   Technology @relation(fields: [technologyId], references: [id])
 
   @@id([projectId, technologyId])
+}
+
+model ArticleTag {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  articles  Article[]
+}
+
+model Article {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  title           Json         // { es: string, en: string }
+  excerpt         Json?        // { es: string, en: string }
+  content         Json         // { es: string, en: string }
+  coverImage      String?
+  author          String       @default("Juan Camilo Albarracín Urrego")
+  published       Boolean      @default(false)
+  featured        Boolean      @default(false)
+  metaTitle       Json?        // { es: string, en: string }
+  metaDescription Json?        // { es: string, en: string }
+  projectId       String?
+  project         Project?     @relation(fields: [projectId], references: [id])
+  tags            ArticleTag[]
+  publishedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([published])
+  @@index([slug])
+  @@index([publishedAt])
 }
 
 model ContactMessage {
@@ -196,4 +228,31 @@ enum MessageStatus {
   RECEIVED
   SENT
   FAILED
+}
+
+enum DiagramType {
+  SYSTEM_CONTEXT
+  CONTAINER
+  COMPONENT
+  SEQUENCE
+  DATA_FLOW
+  ERD
+}
+
+model ArchitectureDiagram {
+  id          String      @id @default(cuid())
+  projectId   String
+  title       Json        // { es: string, en: string }
+  description Json?       // { es: string, en: string }
+  type        DiagramType
+  source      Json        // React Flow: { nodes: [], edges: [] }
+  position    Int         @default(0)
+  published   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  project     Project     @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([published])
+  @@index([projectId, position])
 }

@@ -1,5 +1,13 @@
-import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+
+/** Thrown when HuggingFace credits are depleted (402) */
+export class AiCreditsExhaustedError extends Error {
+  constructor(message = 'AI credits exhausted') {
+    super(message);
+    this.name = 'AiCreditsExhaustedError';
+  }
+}
 
 @Injectable()
 export class AiService {
@@ -53,6 +61,13 @@ export class AiService {
       if (!response.ok) {
         const errorBody = await response.text();
         this.logger.error(`AI error: ${response.status} - ${errorBody}`);
+
+        // 402 = credits exhausted — throw so caller can stop
+        if (response.status === 402) {
+          throw new AiCreditsExhaustedError('HuggingFace credits exhausted');
+        }
+
+        // 504, 429, 5xx = transient — return empty for retry
         return '';
       }
 

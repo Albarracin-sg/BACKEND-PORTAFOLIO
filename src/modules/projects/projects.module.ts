@@ -5,9 +5,10 @@ import { ProjectsAdminController } from './projects.admin.controller';
 import { GithubModule } from '../github/github.module';
 import { AiModule } from '../ai/ai.module';
 import { MetricsModule } from '../metrics/metrics.module';
+import { ContentGenerationModule } from '../content-generation/content-generation.module';
 
 @Module({
-  imports: [GithubModule, AiModule, MetricsModule],
+  imports: [GithubModule, AiModule, MetricsModule, ContentGenerationModule],
   controllers: [ProjectsPublicController, ProjectsAdminController],
   providers: [ProjectsService],
   exports: [ProjectsService],

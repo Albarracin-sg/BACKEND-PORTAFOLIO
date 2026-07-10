@@ -42,6 +42,10 @@ export const envSchema = z.object({
   GITHUB_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(20),
   GITHUB_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
 
+  // Blog Cache
+  BLOG_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(60),
+  BLOG_RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+
   // Projects Cache
   PROJECTS_CACHE_TTL_MS: z.coerce.number().default(300000),
   PROJECTS_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(60),
