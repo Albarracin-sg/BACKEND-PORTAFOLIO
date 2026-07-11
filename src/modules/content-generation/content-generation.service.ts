@@ -13,10 +13,36 @@ export interface ContentGenerationResult {
   errors: string[];
 }
 
+const SUPPORTED_NODE_TYPES = new Set([
+  'database',
+  'service',
+  'api',
+  'client',
+  'queue',
+  'cache',
+  'external',
+  'gateway',
+]);
+
+interface ValidatedNode {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: { label: string; description: string };
+}
+
+interface ValidatedEdge {
+  id: string;
+  source: string;
+  target: string;
+  animated: boolean;
+  label?: string;
+}
+
 @Injectable()
 export class ContentGenerationService {
   private readonly logger = new Logger(ContentGenerationService.name);
-  private creditsExhausted = false; // Early-stop flag for 402
+  private creditsExhausted = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -55,31 +81,42 @@ export class ContentGenerationService {
       return result;
     }
 
-    // Generate diagram
-    try {
-      result.diagram = await this.generateDiagram(project, owner, repo);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Diagram generation failed for ${project.title}: ${msg}`);
-      result.errors.push(`Diagram: ${msg}`);
-      // If we hit credits exhausted in diagram, skip article too
-      if (this.creditsExhausted) return result;
+    // Check what already exists — idempotent per artifact
+    const [existingDiagram, existingArticle] = await Promise.all([
+      this.prisma.architectureDiagram.findFirst({ where: { projectId: project.id } }),
+      this.prisma.article.findFirst({ where: { projectId: project.id } }),
+    ]);
+
+    if (!existingDiagram) {
+      try {
+        result.diagram = await this.generateDiagram(project, owner, repo);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Diagram generation failed for ${project.title}: ${msg}`);
+        result.errors.push(`Diagram: ${msg}`);
+        if (this.creditsExhausted) return result;
+      }
+    } else {
+      this.logger.log(`Diagram already exists for ${project.title}, skipping`);
     }
 
-    // Generate blog article
-    try {
-      result.article = await this.generateBlogArticle(project, owner, repo);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Article generation failed for ${project.title}: ${msg}`);
-      result.errors.push(`Article: ${msg}`);
+    if (!existingArticle) {
+      try {
+        result.article = await this.generateBlogArticle(project, owner, repo);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Article generation failed for ${project.title}: ${msg}`);
+        result.errors.push(`Article: ${msg}`);
+      }
+    } else {
+      this.logger.log(`Article already exists for ${project.title}, skipping`);
     }
 
     return result;
   }
 
   async generateForAllMissing(): Promise<ContentGenerationResult[]> {
-    this.creditsExhausted = false; // Reset flag at start
+    this.creditsExhausted = false;
 
     const projects = await this.prisma.project.findMany({
       where: { githubUrl: { not: '' } },
@@ -88,15 +125,13 @@ export class ContentGenerationService {
     const results: ContentGenerationResult[] = [];
 
     for (let i = 0; i < projects.length; i++) {
-      // Early stop: credits exhausted, no point continuing
       if (this.creditsExhausted) {
-        this.logger.warn(`⚠️ Credits exhausted — stopping content generation after ${results.length} projects`);
+        this.logger.warn(`Credits exhausted — stopping content generation after ${results.length} projects`);
         break;
       }
 
       const project = projects[i];
 
-      // Check if project already has diagrams AND articles
       const [diagramCount, articleCount] = await Promise.all([
         this.prisma.architectureDiagram.count({ where: { projectId: project.id } }),
         this.prisma.article.count({ where: { projectId: project.id } }),
@@ -107,11 +142,17 @@ export class ContentGenerationService {
         continue;
       }
 
-      this.logger.log(`Generating content for ${project.title} (${i + 1}/${projects.length})...`);
+      if (diagramCount === 0 && articleCount === 0) {
+        this.logger.log(`Generating both diagram + article for ${project.title} (${i + 1}/${projects.length})...`);
+      } else if (diagramCount === 0) {
+        this.logger.log(`Generating missing diagram for ${project.title} (${i + 1}/${projects.length})...`);
+      } else {
+        this.logger.log(`Generating missing article for ${project.title} (${i + 1}/${projects.length})...`);
+      }
+
       const result = await this.generateForProject(project.id);
       results.push(result);
 
-      // Rate limiting delay between projects (1.5s)
       if (i < projects.length - 1) {
         await this.delay(1500);
       }
@@ -125,64 +166,102 @@ export class ContentGenerationService {
     owner: string,
     repo: string,
   ): Promise<{ id: string; title: string } | null> {
-    const [tree, readme] = await Promise.all([
-      this.githubService.getRepoTree(owner, repo),
-      this.githubService.getRepoFile(owner, repo, 'README.md'),
-    ]);
+    const evidence = await this.gatherRepoEvidence(owner, repo);
 
-    const fileList = tree?.tree
-      ? tree.tree.slice(0, 80).map((f: any) => f.path).join('\n')
-      : 'Unable to retrieve file tree';
+    const systemPrompt = `You are a senior software architect. Analyze the repository evidence below and create an architecture diagram that accurately models THIS specific project.
 
-    const systemPrompt = `You are a senior software architect creating a System Context architecture diagram.
-You MUST return ONLY valid JSON. No markdown code fences, no explanation, no text outside the JSON.
-The JSON must have exactly this structure:
+You MUST return ONLY valid JSON. No markdown fences, no explanation, no text outside the JSON.
 
+REQUIRED JSON STRUCTURE:
 {
   "nodes": [
-    { "id": "1", "type": "default", "position": { "x": 0, "y": 0 }, "data": { "label": "System Name" } }
+    {
+      "id": "1",
+      "type": "<one of: database, service, api, client, queue, cache, external, gateway>",
+      "position": { "x": 0, "y": 0 },
+      "data": {
+        "label": "Component Name",
+        "description": "What this component does (1 sentence)"
+      }
+    }
   ],
   "edges": [
-    { "id": "e1-2", "source": "1", "target": "2", "animated": false, "label": "description" }
+    {
+      "id": "e1-2",
+      "source": "1",
+      "target": "2",
+      "animated": false,
+      "label": "Relationship description"
+    }
   ]
 }
 
-RULES:
-- Create 4-8 nodes representing the main components/systems
-- Nodes must be laid out in a logical top-to-bottom or left-to-right flow
-- Use the "default" node type for all nodes
-- Position nodes with clear spacing (150-250px apart)
-- Edge labels should describe the relationship or data flow
-- Labels MUST be bilingual format: "Label EN / Label ES"
-- Keep labels concise (max 3-4 words)
-- One central node should be the project itself
-- Surrounding nodes represent external systems, databases, APIs, users, etc.`;
+NODE TYPE RULES — you MUST assign each node one of these types based on what it actually is:
+- "database": Any data store — PostgreSQL, MongoDB, SQLite, Redis, file storage, etc.
+- "service": Backend processing unit — NestJS modules, microservices, workers, cron jobs
+- "api": Exposed HTTP/WebSocket/gRPC endpoints — REST controllers, GraphQL resolvers
+- "client": Frontend consumer — browsers, mobile apps, CLI tools, SPAs
+- "queue": Async message passing — job queues, pub/sub, event buses, RabbitMQ, SQS
+- "cache": In-memory or distributed cache — Redis, Memcached, in-memory maps
+- "external": Third-party services — GitHub API, email providers, payment gateways, OAuth
+- "gateway": Traffic entry point — reverse proxies, load balancers, API gateways, CDNs
 
-    const techNames = Array.isArray(project.technologies)
-      ? project.technologies.map((t: any) => t.technology?.name ?? t.name ?? 'unknown')
-      : [];
-    const descStr = typeof project.description === 'object' ? JSON.stringify(project.description) : String(project.description ?? '');
+EDGE RULES:
+- Every edge MUST have a descriptive label explaining the relationship
+- Use bilingual format: "English / Español" for labels
+- Describe the data flow direction and protocol if evident from the evidence
 
-    const userPrompt = `Create a System Context architecture diagram for this project.
+NODE DATA RULES:
+- Every node MUST have a "description" field (not just a label) explaining what the component does
+- "label" should be the component name (max 3-4 words)
+- "description" should explain responsibility (1 sentence, max 60 chars)
+
+LAYOUT RULES:
+- Position nodes in a logical top-to-bottom or left-to-right flow
+- Space nodes 200-300px apart
+- Place the client/user at the top or left
+- Place databases at the bottom or right
+- Gateways between client and backend
+
+EVIDENCE-BASED RULES:
+- ONLY include components you can identify from the evidence below
+- If the evidence shows a specific framework (e.g. NestJS, Express), name the service accordingly
+- If you see Prisma, name the database "PostgreSQL (Prisma)" or similar
+- If you see Docker/docker-compose, include the gateway/proxy
+- Do NOT invent components that are not supported by the evidence
+- If you are unsure about something, note it in the node description as "(inferred)"
+
+Return ONLY the JSON object.`;
+
+    const userPrompt = `Analyze this project and create an accurate architecture diagram.
 
 PROJECT: ${project.title}
 CATEGORY: ${project.category ?? 'Unknown'}
-TECHNOLOGIES: ${techNames.join(', ')}
+TECHNOLOGIES: ${evidence.techNames.join(', ')}
 
-FILE STRUCTURE:
-${fileList}
+REPOSITORY STRUCTURE:
+${evidence.fileTree}
 
-README:
-${readme?.substring(0, 3000) ?? 'No README available'}
+KEY CONFIGURATION FILES:
+${evidence.configFiles}
 
-Generate the React Flow diagram JSON. Return ONLY the JSON object, nothing else.`;
+README (first 3000 chars):
+${evidence.readme}
+
+FRAMEWORK/DEPENDENCY EVIDENCE:
+${evidence.dependencyEvidence}
+
+DEPLOYMENT EVIDENCE:
+${evidence.deploymentEvidence}
+
+Based on this evidence, generate the architecture diagram JSON. Return ONLY the JSON object.`;
 
     const response = await this.callModelWithRetry(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { maxTokens: 2048, temperature: 0.7, timeout: 120000 },
+      { maxTokens: 3072, temperature: 0.5, timeout: 120000 },
     );
 
     const parsed = this.extractJson(response);
@@ -190,44 +269,182 @@ Generate the React Flow diagram JSON. Return ONLY the JSON object, nothing else.
       throw new Error('AI returned invalid diagram structure');
     }
 
-    // Normalize node positions and ensure valid structure
-    const nodes = parsed.nodes.map((node: any, idx: number) => ({
-      id: String(node.id ?? idx + 1),
-      type: 'default',
-      position: {
-        x: Number(node.position?.x ?? (idx % 3) * 250),
-        y: Number(node.position?.y ?? Math.floor(idx / 3) * 150),
-      },
-      data: { label: String(node.data?.label ?? `Component ${idx + 1}`) },
-    }));
-
-    const edges = parsed.edges.map((edge: any, idx: number) => ({
-      id: String(edge.id ?? `e${idx}`),
-      source: String(edge.source),
-      target: String(edge.target),
-      animated: Boolean(edge.animated),
-      label: edge.label ? String(edge.label) : undefined,
-    }));
+    const validatedNodes = this.validateDiagramNodes(parsed.nodes);
+    const validatedEdges = this.validateDiagramEdges(parsed.edges, validatedNodes);
 
     const title = {
-      es: `Diagrama de Contexto: ${project.title}`,
-      en: `Context Diagram: ${project.title}`,
+      es: `Diagrama de Arquitectura: ${project.title}`,
+      en: `Architecture Diagram: ${project.title}`,
     };
     const description = {
-      es: `Diagrama de arquitectura de nivel de contexto del sistema para ${project.title}`,
-      en: `System context level architecture diagram for ${project.title}`,
+      es: `Diagrama de arquitectura del sistema para ${project.title}`,
+      en: `System architecture diagram for ${project.title}`,
     };
 
     const diagram = await this.diagramsService.createDiagram(project.id, {
       title,
       description,
       type: DiagramType.SYSTEM_CONTEXT,
-      source: { nodes, edges } as any,
+      source: { nodes: validatedNodes, edges: validatedEdges } as any,
       position: 0,
       published: true,
     });
 
     return { id: diagram.id, title: title.es };
+  }
+
+  private async gatherRepoEvidence(owner: string, repo: string) {
+    const [tree, readme, packageJson, dockerCompose, prismaSchema, envExample] = await Promise.all([
+      this.githubService.getRepoTree(owner, repo),
+      this.githubService.getRepoFile(owner, repo, 'README.md'),
+      this.githubService.getRepoFile(owner, repo, 'package.json'),
+      this.githubService.getRepoFile(owner, repo, 'docker-compose.yml').catch(() => null)
+        .then((r) => r ?? this.githubService.getRepoFile(owner, repo, 'docker-compose.yaml')),
+      this.githubService.getRepoFile(owner, repo, 'prisma/schema.prisma'),
+      this.githubService.getRepoFile(owner, repo, '.env.example'),
+    ]);
+
+    const fileTree = tree?.tree
+      ? tree.tree.slice(0, 120).map((f: any) => f.path).join('\n')
+      : 'Unable to retrieve file tree';
+
+    const configFiles: string[] = [];
+    if (packageJson) {
+      try {
+        const pkg = JSON.parse(packageJson);
+        const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+        configFiles.push(`package.json dependencies: ${Object.keys(deps).join(', ')}`);
+        if (pkg.scripts) {
+          configFiles.push(`scripts: ${Object.keys(pkg.scripts).join(', ')}`);
+        }
+      } catch {
+        configFiles.push('package.json: (could not parse)');
+      }
+    }
+    if (dockerCompose) {
+      configFiles.push(`docker-compose.yml:\n${dockerCompose.substring(0, 1500)}`);
+    }
+    if (prismaSchema) {
+      configFiles.push(`prisma/schema.prisma:\n${prismaSchema.substring(0, 2000)}`);
+    }
+    if (envExample) {
+      configFiles.push(`.env.example:\n${envExample.substring(0, 1000)}`);
+    }
+
+    const techNames: string[] = [];
+    if (packageJson) {
+      try {
+        const pkg = JSON.parse(packageJson);
+        const deps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
+        const knownFrameworks = [
+          'next', 'nuxt', 'react', 'vue', 'angular', 'svelte',
+          '@nestjs/core', 'express', 'fastify', 'hono',
+          'prisma', '@prisma/client', 'drizzle-orm', 'typeorm', 'mongoose',
+          'redis', 'ioredis', 'bull', 'bullmq',
+          'docker-compose', 'typescript', 'vite', 'webpack',
+        ];
+        for (const fw of knownFrameworks) {
+          if (deps[fw]) techNames.push(fw);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const dependencyEvidence: string[] = [];
+    if (packageJson) {
+      try {
+        const pkg = JSON.parse(packageJson);
+        const deps = { ...pkg.dependencies };
+        if (deps['@nestjs/core']) dependencyEvidence.push('Backend: NestJS framework');
+        if (deps['express']) dependencyEvidence.push('Backend: Express framework');
+        if (deps['fastify']) dependencyEvidence.push('Backend: Fastify framework');
+        if (deps['@prisma/client'] || deps['prisma']) dependencyEvidence.push('ORM: Prisma (database access layer)');
+        if (deps['redis'] || deps['ioredis']) dependencyEvidence.push('Cache/Queue: Redis');
+        if (deps['bull'] || deps['bullmq']) dependencyEvidence.push('Queue: Bull/BullMQ (job processing)');
+        if (deps['passport']) dependencyEvidence.push('Auth: Passport.js (authentication)');
+        if (deps['@nestjs/swagger']) dependencyEvidence.push('API docs: Swagger/OpenAPI');
+        if (deps['resend']) dependencyEvidence.push('Email: Resend service');
+        if (deps['nodemailer']) dependencyEvidence.push('Email: Nodemailer');
+        if (deps['zod']) dependencyEvidence.push('Validation: Zod schemas');
+      } catch {
+        // ignore
+      }
+    }
+
+    const deploymentEvidence: string[] = [];
+    if (dockerCompose) {
+      deploymentEvidence.push('Docker Compose detected — containerized deployment');
+    }
+    if (prismaSchema) {
+      const dbMatch = prismaSchema.match(/provider\s*=\s*"(\w+)"/);
+      if (dbMatch) {
+        deploymentEvidence.push(`Database provider: ${dbMatch[1]}`);
+      }
+    }
+    if (envExample) {
+      if (envExample.includes('DATABASE_URL')) deploymentEvidence.push('Requires DATABASE_URL env var');
+      if (envExample.includes('GITHUB_TOKEN')) deploymentEvidence.push('Integrates with GitHub API');
+      if (envExample.includes('SMTP_')) deploymentEvidence.push('Uses SMTP email sending');
+      if (envExample.includes('JWT_')) deploymentEvidence.push('JWT-based authentication');
+    }
+
+    return {
+      fileTree,
+      readme: readme?.substring(0, 3000) ?? 'No README available',
+      configFiles: configFiles.join('\n\n'),
+      techNames,
+      dependencyEvidence: dependencyEvidence.length > 0
+        ? dependencyEvidence.join('\n')
+        : 'No clear framework evidence from package.json',
+      deploymentEvidence: deploymentEvidence.length > 0
+        ? deploymentEvidence.join('\n')
+        : 'No deployment configuration detected',
+    };
+  }
+
+  private validateDiagramNodes(rawNodes: any[]): ValidatedNode[] {
+    const nodes: ValidatedNode[] = [];
+    for (let i = 0; i < rawNodes.length; i++) {
+      const raw = rawNodes[i];
+      const rawType = String(raw.type ?? 'service').toLowerCase();
+      const type = SUPPORTED_NODE_TYPES.has(rawType) ? rawType : 'service';
+      nodes.push({
+        id: String(raw.id ?? String(i + 1)),
+        type,
+        position: {
+          x: Number(raw.position?.x ?? (i % 3) * 250),
+          y: Number(raw.position?.y ?? Math.floor(i / 3) * 200),
+        },
+        data: {
+          label: String(raw.data?.label ?? `Component ${i + 1}`),
+          description: String(raw.data?.description ?? ''),
+        },
+      });
+    }
+    return nodes;
+  }
+
+  private validateDiagramEdges(rawEdges: any[], nodes: ValidatedNode[]): ValidatedEdge[] {
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const edges: ValidatedEdge[] = [];
+    for (let i = 0; i < rawEdges.length; i++) {
+      const raw = rawEdges[i];
+      const source = String(raw.source);
+      const target = String(raw.target);
+      if (!nodeIds.has(source) || !nodeIds.has(target)) {
+        this.logger.warn(`Edge ${i} references missing node: ${source} -> ${target}, skipping`);
+        continue;
+      }
+      edges.push({
+        id: String(raw.id ?? `e${i}`),
+        source,
+        target,
+        animated: Boolean(raw.animated ?? false),
+        label: raw.label ? String(raw.label) : undefined,
+      });
+    }
+    return edges;
   }
 
   private async generateBlogArticle(
@@ -269,7 +486,26 @@ Describe the real-world problem or manual process that motivated the project. Be
 Explain why you chose this specific technology or approach over alternatives. Compare with the traditional way and explain the concrete reason your case needed something different. Be opinionated — state your reasoning clearly.
 
 ## Arquitectura / Architecture
-Include a text-based architecture diagram (using arrows and labels, like: Component A → Component B → Component C). Then list 2-4 key architectural decisions with bold labels and clear explanations of WHY each decision was made.
+Include a Mermaid flowchart diagram showing the real system/data flow, then list 2-4 key architectural decisions with bold labels and clear explanations of WHY each decision was made.
+
+MERMAID DIAGRAM REQUIREMENTS (CRITICAL — you MUST follow these exactly):
+- The diagram MUST be a fenced code block with the language tag "mermaid"
+- The diagram MUST start with "flowchart LR" (left-to-right layout)
+- Use quoted labels with concise component names and responsibilities, for example: Bot["main.py\\nbot/handler.py"]
+- Edge labels MUST describe data or control flow, for example: -- message -->, -- polling -->, -- response -->
+- Derive ALL nodes and edges ONLY from the repository evidence provided. Do NOT invent Telegram bots, LLMs, databases, message queues, or any other technology unless the evidence explicitly shows it.
+- If evidence is insufficient for some components, omit them and add a comment node like NOTE["Evidence gap: ..."] explaining what is missing.
+- Ensure Mermaid syntax is valid: safe node IDs (alphanumeric, no spaces), quoted labels, exactly one "flowchart LR" block.
+
+Example of correct Mermaid syntax:
+\`\`\`mermaid
+flowchart LR
+    Client["Browser\nFrontend"] -- HTTP request --> API["api/routes.ts\nRequest handler"]
+    API -- queries --> DB["PostgreSQL\nPrisma ORM"]
+    API -- calls --> Ext["GitHub API\nExternal service"]
+\`\`\`
+
+IMPORTANT: The blog prose MUST reference the diagram and explain the flow depicted in it.
 
 ## El trade-off que nadie te cuenta / The trade-off nobody tells you about
 Describe ONE real trade-off you faced during implementation. This is the most important section — it shows honesty and deep understanding. Explain what went wrong or what you had to compromise on, and how you solved it.
@@ -333,9 +569,15 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
       en: String(parsed.title?.en ?? project.title),
     };
     const content = {
-      es: String(parsed.content?.es ?? ''),
-      en: String(parsed.content?.en ?? ''),
+      es: ContentGenerationService.sanitizeMermaidContent(String(parsed.content?.es ?? '')),
+      en: ContentGenerationService.sanitizeMermaidContent(String(parsed.content?.en ?? '')),
     };
+
+    for (const lang of ['es', 'en'] as const) {
+      if (!ContentGenerationService.hasValidMermaidBlock(content[lang])) {
+        this.logger.warn(`Article ${lang} content missing valid mermaid flowchart LR block — content saved but diagram may need manual review`);
+      }
+    }
     const excerpt = {
       es: String(parsed.excerpt?.es ?? ''),
       en: String(parsed.excerpt?.en ?? ''),
@@ -373,7 +615,6 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
 
   private parseGithubUrl(url: string): { owner: string | null; repo: string | null } {
     try {
-      // Handle both https://github.com/owner/repo and https://github.com/owner/repo.git
       const match = url.match(/github\.com\/([^/]+)\/([^/.]+)/);
       if (match) {
         return { owner: match[1], repo: match[2] };
@@ -387,42 +628,33 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
   private extractJson(text: string): any {
     if (!text) { this.logger.warn('extractJson: empty response'); return null; }
 
-    // Sanitize common AI hallucinations before parsing
     let cleaned = text
-      // Replace em-dash and en-dash with regular hyphen-minus
       .replace(/[\u2013\u2014\u2212]/g, '-')
-      // Remove backslash-pipe patterns like (\|200\|)
       .replace(/\\\|(\d+)\\\|/g, '$1')
-      // Replace curly quotes with straight quotes
       .replace(/[\u201C\u201D\u2018\u2019]/g, '"')
-      // Remove zero-width characters
       .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
-      // Replace unicode "usere" or similar garbage at position values
       .trim();
 
-    // Try to find JSON block wrapped in ```json ... ```
     const codeFenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (codeFenceMatch) {
       try {
         return JSON.parse(codeFenceMatch[1].trim());
       } catch {
-        // Fall through to other methods
+        // Fall through
       }
     }
 
-    // Try to find a JSON object by matching braces
     const firstBrace = cleaned.indexOf('{');
     const lastBrace = cleaned.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace > firstBrace) {
       try {
         return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
       } catch {
-        // Try to fix common issues: trailing commas, missing quotes
         try {
           const fixed = cleaned
             .substring(firstBrace, lastBrace + 1)
-            .replace(/,\s*([}\]])/g, '$1') // trailing commas
-            .replace(/(\w+)\s*:/g, '"$1":'); // unquoted keys
+            .replace(/,\s*([}\]])/g, '$1')
+            .replace(/(\w+)\s*:/g, '"$1":');
           return JSON.parse(fixed);
         } catch {
           // Fall through
@@ -430,7 +662,6 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
       }
     }
 
-    // Try the whole text
     try {
       return JSON.parse(cleaned);
     } catch {
@@ -451,7 +682,58 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
       .substring(0, 80);
   }
 
-  /** Call AI with retry on transient failures (504, network). Throws on 402 (credits). */
+  /**
+   * Validates that article content contains exactly one fenced ```mermaid block
+   * using `flowchart LR`. Returns true if the block is present and valid.
+   */
+  static hasValidMermaidBlock(content: string): boolean {
+    if (!content) return false;
+    const mermaidRegex = /```mermaid\s*\n([\s\S]*?)```/g;
+    const matches = [...content.matchAll(mermaidRegex)];
+    return matches.length === 1 && matches[0][1].trimStart().startsWith('flowchart LR');
+  }
+
+  /**
+   * Sanitizes article content by:
+   * 1. Collapsing multiple mermaid blocks into one
+   * 2. Forcing the diagram type to `flowchart LR` (repairs graph/flowchart TD/etc.)
+   * 3. Wrapping un-fenced mermaid code in proper fences if a flowchart LR line exists
+   * Returns sanitized content, or original content if no repairable mermaid found.
+   */
+  static sanitizeMermaidContent(content: string): string {
+    if (!content) return content;
+
+    const mermaidBlockRegex = /```mermaid\s*\n([\s\S]*?)```/g;
+    const blocks: string[] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = mermaidBlockRegex.exec(content)) !== null) {
+      blocks.push(match[1]);
+    }
+
+    if (blocks.length === 0) return content;
+
+    const firstBlock = blocks[0];
+
+    let diagramBody = firstBlock.trimEnd();
+
+    diagramBody = diagramBody.replace(
+      /^(graph\s+(?:TD|TB|BT|RL|LR))/m,
+      'flowchart LR',
+    );
+    diagramBody = diagramBody.replace(
+      /^(flowchart\s+(?:TD|TB|BT|RL))/m,
+      'flowchart LR',
+    );
+
+    const sanitizedBlock = `\`\`\`mermaid\n${diagramBody}\n\`\`\``;
+
+    let result = content.replace(mermaidBlockRegex, '___MERMAID_PLACEHOLDER___');
+    result = result.replace('___MERMAID_PLACEHOLDER___', sanitizedBlock);
+
+    return result;
+  }
+
   private async callModelWithRetry(
     messages: { role: string; content: string }[],
     options: { maxTokens?: number; temperature?: number; timeout?: number },
@@ -461,9 +743,8 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
       try {
         const response = await this.aiService.callModel(messages, options);
 
-        // Empty response = likely transient failure (504 timeout)
         if (!response && attempt < maxRetries) {
-          const backoff = (attempt + 1) * 5000; // 5s, 10s
+          const backoff = (attempt + 1) * 5000;
           this.logger.warn(`AI returned empty response, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})...`);
           await this.delay(backoff);
           continue;
@@ -473,7 +754,7 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
       } catch (error) {
         if (error instanceof AiCreditsExhaustedError) {
           this.creditsExhausted = true;
-          throw error; // Don't retry credits exhausted
+          throw error;
         }
         if (attempt < maxRetries) {
           const backoff = (attempt + 1) * 5000;
