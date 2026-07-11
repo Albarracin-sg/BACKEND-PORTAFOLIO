@@ -15,6 +15,12 @@ export class BlogService {
     const skip = (page - 1) * limit;
 
     const where: any = { published };
+    if (published) {
+      where.OR = [
+        { projectId: null },
+        { project: { is: { isActive: true } } },
+      ];
+    }
     if (tag) {
       where.tags = { some: { name: tag } };
     }
@@ -86,7 +92,14 @@ export class BlogService {
     }
 
     const articles = await this.prisma.article.findMany({
-      where: { published: true, featured: true },
+      where: {
+        published: true,
+        featured: true,
+        OR: [
+          { projectId: null },
+          { project: { is: { isActive: true } } },
+        ],
+      },
       include: {
         tags: true,
         project: {
@@ -106,8 +119,15 @@ export class BlogService {
   }
 
   async findBySlug(slug: string) {
-    return this.prisma.article.findUnique({
-      where: { slug },
+    return this.prisma.article.findFirst({
+      where: {
+        slug,
+        published: true,
+        OR: [
+          { projectId: null },
+          { project: { is: { isActive: true } } },
+        ],
+      },
       include: {
         tags: true,
         project: {

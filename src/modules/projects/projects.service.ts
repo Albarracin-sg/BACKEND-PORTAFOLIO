@@ -85,7 +85,7 @@ export class ProjectsService {
       });
     }
 
-    return conditions.length > 0 ? { AND: conditions } : {};
+    return { AND: [{ isActive: true }, ...conditions] };
   }
 
   private buildOrderBy(sortBy: string, sortOrder: string): Prisma.ProjectOrderByWithRelationInput {
@@ -180,9 +180,23 @@ export class ProjectsService {
     let updated = 0;
 
     if (repoUrls.length > 0) {
-      await this.prisma.project.deleteMany({
-        where: { githubUrl: { notIn: repoUrls } },
+      const missingProjects = await this.prisma.project.findMany({
+        where: {
+          kind: 'PUBLIC',
+          githubUrl: { notIn: repoUrls },
+          isActive: true,
+        },
+        select: { id: true },
       });
+
+      if (missingProjects.length > 0) {
+        const projectIds = missingProjects.map(({ id }) => id);
+        await this.prisma.$transaction([
+          this.prisma.project.updateMany({ where: { id: { in: projectIds } }, data: { isActive: false } }),
+          this.prisma.article.updateMany({ where: { projectId: { in: projectIds } }, data: { published: false } }),
+          this.prisma.architectureDiagram.updateMany({ where: { projectId: { in: projectIds } }, data: { published: false } }),
+        ]);
+      }
     }
 
     for (const repo of repos) {
@@ -225,6 +239,8 @@ export class ProjectsService {
             liveUrl: repo.homepage || null,
             category: aiEnrichment.category || 'web',
             status: repo.archived ? 'prototype' : 'production',
+            isActive: true,
+            kind: 'PUBLIC',
             featured: featuredIds.has(repo.id),
             stars: repo.stargazers_count ?? 0,
             forks: repo.forks_count ?? 0,
@@ -285,6 +301,7 @@ export class ProjectsService {
           date: lastPush,
           liveUrl: repo.homepage || existing.liveUrl,
           category: aiEnrichment?.category || existing.category,
+          isActive: true,
           ...(aiEnrichment?.problem ? {
             description: aiEnrichment.description,
             problem: aiEnrichment.problem,
@@ -360,8 +377,8 @@ GUIDELINES:
   }
 
   async getProject(id: string) {
-    return this.prisma.project.findUnique({
-      where: { id },
+    return this.prisma.project.findFirst({
+      where: { id, isActive: true },
       include: { technologies: { include: { technology: true } } },
     });
   }
@@ -395,6 +412,8 @@ GUIDELINES:
         liveUrl: data.liveUrl,
         category: data.category,
         status: data.status,
+        isActive: data.isActive ?? true,
+        kind: data.kind ?? 'PUBLIC',
         featured: data.featured ?? false,
         stars: data.stars ?? 0,
         forks: data.forks ?? 0,
@@ -418,6 +437,8 @@ GUIDELINES:
       liveUrl: data.liveUrl,
       category: data.category,
       status: data.status,
+      isActive: data.isActive,
+      kind: data.kind,
       featured: data.featured,
       stars: data.stars,
       forks: data.forks,
@@ -430,6 +451,13 @@ GUIDELINES:
         where: { id },
         data: baseUpdate,
       });
+
+      if (data.isActive === false) {
+        await Promise.all([
+          tx.article.updateMany({ where: { projectId: id }, data: { published: false } }),
+          tx.architectureDiagram.updateMany({ where: { projectId: id }, data: { published: false } }),
+        ]);
+      }
 
       if (data.technologies) {
         // 1. Borrar asociaciones viejas
@@ -463,6 +491,8 @@ GUIDELINES:
       });
     }, {
       timeout: 10000, // 10 segundos para evitar timeouts en operaciones pesadas
+    }).finally(() => {
+      this.cache = null;
     });
   }
 

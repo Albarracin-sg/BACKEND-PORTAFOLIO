@@ -14,6 +14,7 @@ export class DiagramsService {
         published: true,
       },
       orderBy: { position: 'asc' },
+      take: 1,
       select: {
         id: true,
         title: true,
@@ -47,16 +48,25 @@ export class DiagramsService {
   }
 
   async createDiagram(projectId: string, data: CreateDiagramDto) {
-    return this.prisma.architectureDiagram.create({
-      data: {
-        projectId,
-        title: data.title as any,
-        description: data.description as any,
-        type: data.type,
-        source: data.source as any,
-        position: data.position ?? 0,
-        published: data.published ?? false,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      if (data.published) {
+        await tx.architectureDiagram.updateMany({
+          where: { projectId, published: true },
+          data: { published: false },
+        });
+      }
+
+      return tx.architectureDiagram.create({
+        data: {
+          projectId,
+          title: data.title as any,
+          description: data.description as any,
+          type: data.type,
+          source: data.source as any,
+          position: data.position ?? 0,
+          published: data.published ?? false,
+        },
+      });
     });
   }
 
@@ -69,16 +79,25 @@ export class DiagramsService {
       throw new NotFoundException(`Diagram with ID ${id} not found`);
     }
 
-    return this.prisma.architectureDiagram.update({
-      where: { id },
-      data: {
-        ...(data.title !== undefined && { title: data.title as any }),
-        ...(data.description !== undefined && { description: data.description as any }),
-        ...(data.type !== undefined && { type: data.type }),
-        ...(data.source !== undefined && { source: data.source as any }),
-        ...(data.position !== undefined && { position: data.position }),
-        ...(data.published !== undefined && { published: data.published }),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      if (data.published) {
+        await tx.architectureDiagram.updateMany({
+          where: { projectId: existing.projectId, id: { not: id }, published: true },
+          data: { published: false },
+        });
+      }
+
+      return tx.architectureDiagram.update({
+        where: { id },
+        data: {
+          ...(data.title !== undefined && { title: data.title as any }),
+          ...(data.description !== undefined && { description: data.description as any }),
+          ...(data.type !== undefined && { type: data.type }),
+          ...(data.source !== undefined && { source: data.source as any }),
+          ...(data.position !== undefined && { position: data.position }),
+          ...(data.published !== undefined && { published: data.published }),
+        },
+      });
     });
   }
 

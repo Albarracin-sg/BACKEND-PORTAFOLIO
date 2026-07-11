@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsDateString, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { ProjectKind } from '@prisma/client';
 
 export class CreateProjectDto {
   @ApiProperty()
@@ -26,9 +27,10 @@ export class CreateProjectDto {
   @IsString()
   imageUrl: string;
 
-  @ApiProperty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsString()
-  githubUrl: string;
+  githubUrl?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -42,6 +44,16 @@ export class CreateProjectDto {
   @ApiProperty({ example: 'production' })
   @IsString()
   status: string;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiProperty({ enum: ProjectKind, required: false, default: ProjectKind.PUBLIC })
+  @IsOptional()
+  @IsEnum(ProjectKind)
+  kind?: ProjectKind;
 
   @ApiProperty({ required: false })
   @IsOptional()

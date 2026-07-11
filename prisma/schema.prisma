@@ -54,10 +54,12 @@ model Project {
   challenge    Json
   solution     Json
   imageUrl     String
-  githubUrl    String
+  githubUrl    String?
   liveUrl      String?
   category     String
   status       String
+  isActive     Boolean             @default(true)
+  kind         ProjectKind         @default(PUBLIC)
   featured     Boolean             @default(false)
   stars        Int                 @default(0)
   forks        Int                 @default(0)
@@ -68,6 +70,11 @@ model Project {
   technologies ProjectTechnology[]
   articles    Article[]
   diagrams    ArchitectureDiagram[]
+}
+
+enum ProjectKind {
+  PUBLIC
+  PRIVATE
 }
 
 model Technology {
