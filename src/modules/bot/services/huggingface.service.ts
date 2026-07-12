@@ -21,6 +21,10 @@ const PORTFOLIO_SOURCE_TYPE = {
 
 type PortfolioSourceType = (typeof PORTFOLIO_SOURCE_TYPE)[keyof typeof PORTFOLIO_SOURCE_TYPE];
 
+const BLOG_DIRECTORY_TOKENS = new Set([
+  'articulo', 'articulos', 'blog', 'blogs', 'post', 'posts',
+]);
+
 interface PortfolioSource {
   type: PortfolioSourceType;
   title: string;
@@ -91,9 +95,20 @@ export class HuggingFaceService implements OnModuleInit {
    */
   private async getJuanContext(): Promise<string> {
     try {
-      const [githubStats, projects, apiStats] = await Promise.all([
+      const [githubStats, projects, articles, apiStats] = await Promise.all([
         this.githubService.getStats().catch(() => null),
         this.projectsService.listPublicProjects({}).catch(() => []),
+        this.prisma.article.findMany({
+          where: {
+            published: true,
+            OR: [
+              { projectId: null },
+              { project: { is: { isActive: true } } },
+            ],
+          },
+          orderBy: { publishedAt: 'desc' },
+          select: { slug: true, title: true },
+        }).catch(() => []),
         this.statsService.getStats().catch(() => null),
       ]);
 
@@ -104,9 +119,22 @@ export class HuggingFaceService implements OnModuleInit {
       context += `- Inicio: #home\n`;
       context += `- Sobre mí: #about\n`;
       context += `- Proyectos: #projects (Página completa en /projects)\n`;
+      context += `- Blog: /blog\n`;
       context += `- Estadísticas: /stats (O sección #stats)\n`;
       context += `- Contacto: #contact\n`;
       context += `INSTRUCCIÓN: Si el usuario quiere ir a una sección, indícale el link o el ancla (ej: "Podés ver mis proyectos en /projects").\n\n`;
+
+      if (articles.length > 0) {
+        const visibleArticles = articles.slice(0, 20);
+        context += `BLOG PUBLICADO (${articles.length} artículo${articles.length === 1 ? '' : 's'}):\n`;
+        visibleArticles.forEach((article) => {
+          context += `- ${this.getLocalizedText(article.title)}: /blog/${article.slug}\n`;
+        });
+        if (articles.length > visibleArticles.length) {
+          context += `- Hay ${articles.length - visibleArticles.length} artículos adicionales en /blog\n`;
+        }
+        context += 'INSTRUCCIÓN: Si te preguntan por blogs o artículos, NUNCA digas que no existe blog. Usa esta lista como fuente y comparte sus links cuando aplique.\n\n';
+      }
 
       if (githubStats) {
         context += `GITHUB STATS:\n`;
@@ -285,9 +313,15 @@ export class HuggingFaceService implements OnModuleInit {
         .slice(0, 4)
         .map(({ source }) => source);
 
-      if (rankedSources.length === 0) return '';
+      const isBlogDirectoryQuery = queryTokens.some((token) => BLOG_DIRECTORY_TOKENS.has(token));
+      const fallbackBlogSources = isBlogDirectoryQuery
+        ? sources.filter((source) => source.type === PORTFOLIO_SOURCE_TYPE.ARTICLE).slice(0, 10)
+        : [];
+      const relevantSources = rankedSources.length > 0 ? rankedSources : fallbackBlogSources;
 
-      const formattedSources = rankedSources
+      if (relevantSources.length === 0) return '';
+
+      const formattedSources = relevantSources
         .map((source, index) => [
           `SOURCE ${index + 1} (${source.type})`,
           `Title: ${source.title}`,
