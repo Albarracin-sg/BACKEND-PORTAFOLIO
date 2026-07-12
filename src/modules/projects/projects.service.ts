@@ -429,6 +429,9 @@ GUIDELINES:
   }
 
   async updateProject(id: string, data: UpdateProjectDto) {
+    const technologyIds = data.technologies
+      ? await this.resolveTechnologyIds(data.technologies)
+      : undefined;
     const baseUpdate = {
       title: data.title,
       description: data.description,
@@ -452,51 +455,46 @@ GUIDELINES:
     return this.prisma.$transaction(async (tx) => {
       const project = await tx.project.update({
         where: { id },
-        data: baseUpdate,
+        data: {
+          ...baseUpdate,
+          technologies: technologyIds
+            ? {
+                deleteMany: {},
+                createMany: {
+                  data: technologyIds.map((technologyId) => ({ technologyId })),
+                },
+              }
+            : undefined,
+        },
+        include: { technologies: { include: { technology: true } } },
       });
 
       if (data.isActive === false) {
-        await Promise.all([
-          tx.article.updateMany({ where: { projectId: id }, data: { published: false } }),
-          tx.architectureDiagram.updateMany({ where: { projectId: id }, data: { published: false } }),
-        ]);
+        await tx.article.updateMany({ where: { projectId: id }, data: { published: false } });
+        await tx.architectureDiagram.updateMany({ where: { projectId: id }, data: { published: false } });
       }
 
-      if (data.technologies) {
-        // 1. Borrar asociaciones viejas
-        await tx.projectTechnology.deleteMany({ where: { projectId: id } });
-        
-        // 2. Asegurar que todas las tecnologías existan (concurrentemente)
-        const techPromises = data.technologies.map(name => 
-          tx.technology.upsert({
-            where: { name },
-            update: {},
-            create: { name },
-          })
-        );
-        const techs = await Promise.all(techPromises);
-
-        // 3. Crear las nuevas asociaciones en batch
-        if (techs.length > 0) {
-          await tx.projectTechnology.createMany({
-            data: techs.map(t => ({
-              projectId: id,
-              technologyId: t.id,
-            })),
-            skipDuplicates: true,
-          });
-        }
-      }
-
-      return tx.project.findUnique({
-        where: { id: project.id },
-        include: { technologies: { include: { technology: true } } },
-      });
-    }, {
-      timeout: 10000, // 10 segundos para evitar timeouts en operaciones pesadas
+      return project;
     }).finally(() => {
       this.cache = null;
     });
+  }
+
+  private async resolveTechnologyIds(technologies: string[]): Promise<string[]> {
+    const names = [...new Set(technologies.map((name) => name.trim()).filter(Boolean))];
+    if (!names.length) return [];
+
+    await this.prisma.technology.createMany({
+      data: names.map((name) => ({ name })),
+      skipDuplicates: true,
+    });
+
+    const existingTechnologies = await this.prisma.technology.findMany({
+      where: { name: { in: names } },
+      select: { id: true },
+    });
+
+    return existingTechnologies.map((technology) => technology.id);
   }
 
   async deleteProject(id: string) {
