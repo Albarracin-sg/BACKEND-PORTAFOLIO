@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { HuggingFaceService } from '../services/huggingface.service';
+import { PortfolioRetrievalService } from '../services/portfolio-retrieval.service';
 
 @ApiTags('Admin Bot')
 @ApiBearerAuth()
@@ -23,7 +24,16 @@ import { HuggingFaceService } from '../services/huggingface.service';
 @Roles(Role.ADMIN)
 @Controller('admin/bot')
 export class BotAdminController {
-  constructor(private readonly huggingFaceService: HuggingFaceService) {}
+  constructor(
+    private readonly huggingFaceService: HuggingFaceService,
+    private readonly portfolioRetrievalService: PortfolioRetrievalService,
+  ) {}
+
+  @Post('embeddings/sync')
+  @HttpCode(HttpStatus.OK)
+  async syncPortfolioEmbeddings() {
+    return this.portfolioRetrievalService.syncEmbeddings();
+  }
 
   @Get('threads')
   @HttpCode(HttpStatus.OK)

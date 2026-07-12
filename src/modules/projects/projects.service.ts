@@ -6,6 +6,7 @@ import { GithubService } from '../github/github.service';
 import { AiService } from '../ai/ai.service';
 import { MetricsService } from '../metrics/metrics.service';
 import { Prisma } from '@prisma/client';
+import { AUTHOR_CREATION_VOICE } from '../../config/prompts/bot.personality';
 
 interface ProjectQuery {
   search?: string;
@@ -335,6 +336,8 @@ export class ProjectsService {
     this.logger.log(`🤖 Enriching project ${repo.name} with AI (Full Analysis)...`);
     
     const prompt = `You are a Senior Software Architect. Analyze this GitHub repository and generate professional content and metadata for a portfolio.
+
+${AUTHOR_CREATION_VOICE.projectMetadata}
     
 REPOSITORY: ${repo.name}
 DESCRIPTION: ${repo.description}

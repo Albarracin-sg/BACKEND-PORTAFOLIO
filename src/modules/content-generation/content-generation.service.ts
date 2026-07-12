@@ -5,6 +5,7 @@ import { GithubService } from '../github/github.service';
 import { BlogService } from '../blog/blog.service';
 import { DiagramsService } from '../diagrams/diagrams.service';
 import { DiagramType } from '@prisma/client';
+import { AUTHOR_CREATION_VOICE } from '../../config/prompts/bot.personality';
 
 export interface ContentGenerationResult {
   project: { id: string; title: string };
@@ -158,6 +159,26 @@ export class ContentGenerationService {
       }
     }
 
+    try {
+      const repairResult = await this.repairArticleGithubLinks();
+      if (repairResult.fixed > 0 || repairResult.projectsLinked > 0) {
+        this.logger.log(`Auto-repair: ${repairResult.fixed} URLs patched, ${repairResult.projectsLinked} articles linked to projects`);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Auto-repair of article links failed: ${msg}`);
+    }
+
+    try {
+      const contentRepair = await this.repairArticleContent();
+      if (contentRepair.repaired > 0) {
+        this.logger.log(`Auto-repair: ${contentRepair.repaired} articles got mermaid diagrams, ${contentRepair.skipped} skipped`);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Auto-repair of article content failed: ${msg}`);
+    }
+
     return results;
   }
 
@@ -170,6 +191,8 @@ export class ContentGenerationService {
 
     const systemPrompt = `You are a senior software architect. Analyze the repository evidence below and create an architecture diagram that accurately models THIS specific project.
 
+${AUTHOR_CREATION_VOICE.architecture}
+
 You MUST return ONLY valid JSON. No markdown fences, no explanation, no text outside the JSON.
 
 REQUIRED JSON STRUCTURE:
@@ -178,7 +201,6 @@ REQUIRED JSON STRUCTURE:
     {
       "id": "1",
       "type": "<one of: database, service, api, client, queue, cache, external, gateway>",
-      "position": { "x": 0, "y": 0 },
       "data": {
         "label": "Component Name",
         "description": "What this component does (1 sentence)"
@@ -195,6 +217,8 @@ REQUIRED JSON STRUCTURE:
     }
   ]
 }
+
+IMPORTANT: Do NOT include a "position" field in nodes. The server assigns layout positions automatically.
 
 NODE TYPE RULES — you MUST assign each node one of these types based on what it actually is:
 - "database": Any data store — PostgreSQL, MongoDB, SQLite, Redis, file storage, etc.
@@ -215,13 +239,6 @@ NODE DATA RULES:
 - Every node MUST have a "description" field (not just a label) explaining what the component does
 - "label" should be the component name (max 3-4 words)
 - "description" should explain responsibility (1 sentence, max 60 chars)
-
-LAYOUT RULES:
-- Position nodes in a logical top-to-bottom or left-to-right flow
-- Space nodes 200-300px apart
-- Place the client/user at the top or left
-- Place databases at the bottom or right
-- Gateways between client and backend
 
 EVIDENCE-BASED RULES:
 - ONLY include components you can identify from the evidence below
@@ -264,9 +281,14 @@ Based on this evidence, generate the architecture diagram JSON. Return ONLY the 
       { maxTokens: 3072, temperature: 0.5, timeout: 120000 },
     );
 
-    const parsed = this.extractJson(response);
-    if (!parsed || !parsed.nodes || !parsed.edges) {
-      throw new Error('AI returned invalid diagram structure');
+    let parsed = this.extractJson(response);
+    if (!this.isValidDiagramPayload(parsed)) {
+      this.logger.warn('Initial diagram response malformed, attempting corrective retry');
+      parsed = await this.correctiveDiagramRetry(systemPrompt, userPrompt);
+    }
+
+    if (!parsed || !this.isValidDiagramPayload(parsed)) {
+      throw new Error('AI returned invalid diagram structure after retry');
     }
 
     const validatedNodes = this.validateDiagramNodes(parsed.nodes);
@@ -405,19 +427,37 @@ Based on this evidence, generate the architecture diagram JSON. Return ONLY the 
 
   private validateDiagramNodes(rawNodes: any[]): ValidatedNode[] {
     const nodes: ValidatedNode[] = [];
+    const seenIds = new Set<string>();
+
     for (let i = 0; i < rawNodes.length; i++) {
       const raw = rawNodes[i];
+
+      const rawId = String(raw.id ?? '').trim();
+      if (!rawId) {
+        this.logger.warn(`Node at index ${i} has empty id, assigning fallback`);
+      }
+      const id = rawId || `node-${i + 1}`;
+      if (seenIds.has(id)) {
+        this.logger.warn(`Duplicate node id "${id}" at index ${i}, assigning fallback`);
+      }
+      const finalId = seenIds.has(id) ? `${id}-${i + 1}` : id;
+      seenIds.add(finalId);
+
       const rawType = String(raw.type ?? 'service').toLowerCase();
       const type = SUPPORTED_NODE_TYPES.has(rawType) ? rawType : 'service';
+
+      const rawLabel = String(raw.data?.label ?? '').trim();
+      const label = rawLabel || `Component ${i + 1}`;
+
       nodes.push({
-        id: String(raw.id ?? String(i + 1)),
+        id: finalId,
         type,
         position: {
-          x: Number(raw.position?.x ?? (i % 3) * 250),
-          y: Number(raw.position?.y ?? Math.floor(i / 3) * 200),
+          x: (i % 3) * 250,
+          y: Math.floor(i / 3) * 200,
         },
         data: {
-          label: String(raw.data?.label ?? `Component ${i + 1}`),
+          label,
           description: String(raw.data?.description ?? ''),
         },
       });
@@ -447,11 +487,50 @@ Based on this evidence, generate the architecture diagram JSON. Return ONLY the 
     return edges;
   }
 
-  private async generateBlogArticle(
-    project: { id: string; title: string; description: any; category: string | null; technologies: any },
+  private isValidDiagramPayload(payload: any): boolean {
+    if (!payload || typeof payload !== 'object') return false;
+    if (!Array.isArray(payload.nodes) || payload.nodes.length === 0) return false;
+    if (!Array.isArray(payload.edges)) return false;
+    return true;
+  }
+
+  private async correctiveDiagramRetry(
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<any | null> {
+    const retrySystem = `${systemPrompt}
+
+PREVIOUS RESPONSE WAS MALFORMED. You must output ONLY valid JSON matching the required structure. Do NOT include any text, explanation, or markdown fences outside the JSON. Do NOT include "position" fields in nodes. Output a JSON object with "nodes" (array) and "edges" (array) keys only.`;
+
+    try {
+      const retryResponse = await this.callModelWithRetry(
+        [
+          { role: 'system', content: retrySystem },
+          { role: 'user', content: userPrompt },
+        ],
+        { maxTokens: 3072, temperature: 0.3, timeout: 120000 },
+        0,
+      );
+      return this.extractJson(retryResponse);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Corrective retry also failed: ${msg}`);
+      return null;
+    }
+  }
+
+  async generateBlogArticleData(
+    project: { id: string; title: string; description: any; category: string | null; technologies: any; githubUrl?: string | null },
     owner: string,
     repo: string,
-  ): Promise<{ id: string; slug: string; title: string } | null> {
+  ): Promise<{
+    title: { es: string; en: string };
+    content: { es: string; en: string };
+    excerpt: { es: string; en: string };
+    metaTitle: { es: string; en: string };
+    metaDescription: { es: string; en: string };
+    tags: string[];
+  } | null> {
     const [tree, readme] = await Promise.all([
       this.githubService.getRepoTree(owner, repo),
       this.githubService.getRepoFile(owner, repo, 'README.md'),
@@ -461,7 +540,11 @@ Based on this evidence, generate the architecture diagram JSON. Return ONLY the 
       ? tree.tree.slice(0, 80).map((f: any) => f.path).join('\n')
       : 'Unable to retrieve file tree';
 
+    const githubUrl = project.githubUrl ?? '';
+
     const systemPrompt = `You are Juan Camilo Albarracín Urrego, a senior backend architect and developer. You write technical blog articles about your projects with a personal, narrative tone. You write in first person, as if telling someone how you built something and why.
+
+${AUTHOR_CREATION_VOICE.article}
 
 You MUST return ONLY valid JSON. No markdown code fences, no explanation, no text outside the JSON.
 The JSON must have exactly this structure:
@@ -518,7 +601,7 @@ One honest reflection about what you would change if starting over. This builds 
 
 ---
 
-END with: "¿Querés profundizar en algún componente? Contactame o revisá el código en [GitHub link]."
+END with: "¿Querés profundizar en algún componente? Contactame o revisá el código en ${githubUrl}." — use the exact githubUrl value provided in the user prompt, never output the placeholder "[GitHub link]".
 
 IMPORTANT RULES for content:
 - Write 800-1500 words per language
@@ -542,6 +625,7 @@ PROJECT: ${project.title}
 DESCRIPTION: ${descStr}
 CATEGORY: ${project.category ?? 'Unknown'}
 TECHNOLOGIES: ${techNames.join(', ')}
+GITHUB_URL: ${githubUrl}
 
 FILE STRUCTURE:
 ${fileList}
@@ -578,39 +662,51 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
         this.logger.warn(`Article ${lang} content missing valid mermaid flowchart LR block — content saved but diagram may need manual review`);
       }
     }
-    const excerpt = {
-      es: String(parsed.excerpt?.es ?? ''),
-      en: String(parsed.excerpt?.en ?? ''),
-    };
-    const metaTitle = {
-      es: String(parsed.metaTitle?.es ?? title.es),
-      en: String(parsed.metaTitle?.en ?? title.en),
-    };
-    const metaDescription = {
-      es: String(parsed.metaDescription?.es ?? excerpt.es),
-      en: String(parsed.metaDescription?.en ?? excerpt.en),
-    };
-    const tags = Array.isArray(parsed.tags)
-      ? parsed.tags.map(String)
-      : [];
 
-    const slug = this.generateSlug(title.es);
-
-    const article = await this.blogService.create({
+    return {
       title,
       content,
-      excerpt,
+      excerpt: {
+        es: String(parsed.excerpt?.es ?? ''),
+        en: String(parsed.excerpt?.en ?? ''),
+      },
+      metaTitle: {
+        es: String(parsed.metaTitle?.es ?? title.es),
+        en: String(parsed.metaTitle?.en ?? title.en),
+      },
+      metaDescription: {
+        es: String(parsed.metaDescription?.es ?? ''),
+        en: String(parsed.metaDescription?.en ?? ''),
+      },
+      tags: Array.isArray(parsed.tags) ? parsed.tags.map(String) : [],
+    };
+  }
+
+  private async generateBlogArticle(
+    project: { id: string; title: string; description: any; category: string | null; technologies: any; githubUrl?: string | null },
+    owner: string,
+    repo: string,
+  ): Promise<{ id: string; slug: string; title: string } | null> {
+    const data = await this.generateBlogArticleData(project, owner, repo);
+    if (!data) return null;
+
+    const slug = this.generateSlug(data.title.es);
+
+    const article = await this.blogService.create({
+      title: data.title,
+      content: data.content,
+      excerpt: data.excerpt,
       slug,
       author: 'Juan Camilo Albarracín Urrego',
       published: true,
       featured: false,
-      metaTitle,
-      metaDescription,
+      metaTitle: data.metaTitle,
+      metaDescription: data.metaDescription,
       projectId: project.id,
-      tags,
+      tags: data.tags,
     });
 
-    return { id: article.id, slug: article.slug, title: title.es };
+    return { id: article.id, slug: article.slug, title: data.title.es };
   }
 
   private parseGithubUrl(url: string): { owner: string | null; repo: string | null } {
@@ -728,8 +824,12 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
 
     const sanitizedBlock = `\`\`\`mermaid\n${diagramBody}\n\`\`\``;
 
-    let result = content.replace(mermaidBlockRegex, '___MERMAID_PLACEHOLDER___');
-    result = result.replace('___MERMAID_PLACEHOLDER___', sanitizedBlock);
+    const firstMatch = /```mermaid\s*\n([\s\S]*?)```/.exec(content);
+    if (!firstMatch || firstMatch.index === undefined) return content;
+
+    const firstBlockIndex = firstMatch.index;
+    let result = content.replace(mermaidBlockRegex, '');
+    result = result.slice(0, firstBlockIndex) + sanitizedBlock + result.slice(firstBlockIndex);
 
     return result;
   }
@@ -766,6 +866,184 @@ Generate the blog article JSON. Return ONLY the JSON object, nothing else.`;
       }
     }
     return '';
+  }
+
+  async repairArticleContent(): Promise<{ repaired: number; skipped: number; slugs: string[] }> {
+    const allArticles = await this.prisma.article.findMany({
+      select: { id: true, slug: true, content: true, projectId: true },
+    });
+
+    const needsRepair = allArticles.filter((a) => {
+      const c = a.content as Record<string, string> | null;
+      if (!c) return true;
+      return !ContentGenerationService.hasValidMermaidBlock(c.es ?? '') ||
+        !ContentGenerationService.hasValidMermaidBlock(c.en ?? '');
+    });
+
+    this.logger.log(`repairArticleContent: ${needsRepair.length} articles need mermaid repair out of ${allArticles.length} total`);
+
+    let repaired = 0;
+    let skipped = 0;
+    const slugs: string[] = [];
+
+    for (const article of needsRepair) {
+      try {
+        if (!article.projectId) {
+          this.logger.warn(`repairArticleContent: article "${article.slug}" has no projectId, skipping`);
+          skipped++;
+          continue;
+        }
+
+        const project = await this.prisma.project.findUnique({
+          where: { id: article.projectId },
+          include: { technologies: { include: { technology: true } } },
+        });
+
+        if (!project || !project.githubUrl) {
+          this.logger.warn(`repairArticleContent: project not found or no githubUrl for article "${article.slug}", skipping`);
+          skipped++;
+          continue;
+        }
+
+        const { owner, repo } = this.parseGithubUrl(project.githubUrl);
+        if (!owner || !repo) {
+          this.logger.warn(`repairArticleContent: could not parse github URL for article "${article.slug}", skipping`);
+          skipped++;
+          continue;
+        }
+
+        const newData = await this.generateBlogArticleData(project, owner, repo);
+        if (!newData) {
+          this.logger.warn(`repairArticleContent: AI returned null for article "${article.slug}", skipping`);
+          skipped++;
+          continue;
+        }
+
+        const hasEs = ContentGenerationService.hasValidMermaidBlock(newData.content.es);
+        const hasEn = ContentGenerationService.hasValidMermaidBlock(newData.content.en);
+
+        if (!hasEs && !hasEn) {
+          this.logger.warn(`repairArticleContent: new content still missing mermaid for "${article.slug}", skipping`);
+          skipped++;
+          continue;
+        }
+
+        await this.prisma.article.update({
+          where: { id: article.id },
+          data: { content: newData.content },
+        });
+
+        repaired++;
+        slugs.push(article.slug);
+        this.logger.log(`repairArticleContent: repaired mermaid diagrams in article "${article.slug}"`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.error(`repairArticleContent: failed for article "${article.slug}": ${msg}`);
+        skipped++;
+      }
+    }
+
+    this.logger.log(`repairArticleContent: ${repaired} repaired, ${skipped} skipped`);
+    return { repaired, skipped, slugs };
+  }
+
+  async repairArticleGithubLinks(): Promise<{ fixed: number; slugs: string[]; projectsLinked: number; projectsLinkedSlugs: string[] }> {
+    const LITERAL = '[GitHub link]';
+
+    const allArticles = await this.prisma.article.findMany({
+      select: { id: true, slug: true, content: true, projectId: true },
+    });
+
+    const needsGithubFix = allArticles.filter((a) => {
+      const c = a.content as Record<string, string> | null;
+      return (c?.es?.includes(LITERAL) ?? false) || (c?.en?.includes(LITERAL) ?? false);
+    });
+
+    const projects = await this.prisma.project.findMany({
+      select: { id: true, title: true, githubUrl: true },
+    });
+
+    const projectBySlug = new Map<string, (typeof projects)[number]>();
+    for (const p of projects) {
+      const normalizedSlug = this.normalizeSlug(p.title);
+      projectBySlug.set(normalizedSlug, p);
+    }
+
+    let fixed = 0;
+    const fixedSlugs: string[] = [];
+
+    for (const article of needsGithubFix) {
+      const content = article.content as Record<string, string>;
+      let githubUrl: string | null = null;
+
+      if (article.projectId) {
+        const project = projects.find((p) => p.id === article.projectId);
+        githubUrl = project?.githubUrl ?? null;
+      } else {
+        const normalizedArticleSlug = this.normalizeSlug(article.slug);
+        const match = projectBySlug.get(normalizedArticleSlug);
+        if (match) {
+          githubUrl = match.githubUrl ?? null;
+        }
+      }
+
+      if (!githubUrl) {
+        this.logger.warn(`repairArticleGithubLinks: no githubUrl found for article "${article.slug}", skipping URL fix`);
+        continue;
+      }
+
+      const patchedEs = content.es?.replaceAll(LITERAL, githubUrl) ?? content.es;
+      const patchedEn = content.en?.replaceAll(LITERAL, githubUrl) ?? content.en;
+
+      if (patchedEs === content.es && patchedEn === content.en) continue;
+
+      await this.prisma.article.update({
+        where: { id: article.id },
+        data: { content: { es: patchedEs, en: patchedEn } },
+      });
+
+      fixed++;
+      fixedSlugs.push(article.slug);
+      this.logger.log(`repairArticleGithubLinks: patched [GitHub link] → ${githubUrl} in article "${article.slug}"`);
+    }
+
+    const needsProjectLink = allArticles.filter((a) => {
+      if (a.projectId) return false;
+      const normalized = this.normalizeSlug(a.slug);
+      return projectBySlug.has(normalized);
+    });
+
+    let projectsLinked = 0;
+    const projectsLinkedSlugs: string[] = [];
+
+    for (const article of needsProjectLink) {
+      const normalized = this.normalizeSlug(article.slug);
+      const match = projectBySlug.get(normalized);
+      if (!match) continue;
+
+      await this.prisma.article.update({
+        where: { id: article.id },
+        data: { projectId: match.id },
+      });
+
+      projectsLinked++;
+      projectsLinkedSlugs.push(article.slug);
+      this.logger.log(`repairArticleGithubLinks: linked article "${article.slug}" to project "${match.title}"`);
+    }
+
+    this.logger.log(`repairArticleGithubLinks: ${fixed} URLs patched, ${projectsLinked} articles linked to projects`);
+    return { fixed, slugs: fixedSlugs, projectsLinked, projectsLinkedSlugs };
+  }
+
+  private normalizeSlug(input: string): string {
+    return input
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
   }
 
   private delay(ms: number): Promise<void> {
