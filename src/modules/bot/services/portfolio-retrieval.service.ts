@@ -17,6 +17,10 @@ const EMBEDDING_PURPOSE = {
   QUERY: 'query',
 } as const;
 
+const HUGGINGFACE_EMBEDDING_MODEL = 'ibm-granite/granite-embedding-97m-multilingual-r2';
+const HUGGINGFACE_EMBEDDINGS_URL = `https://router.huggingface.co/hf-inference/models/${HUGGINGFACE_EMBEDDING_MODEL}`;
+const HUGGINGFACE_EMBEDDING_DIMENSIONS = 384;
+
 type EmbeddingPurpose = (typeof EMBEDDING_PURPOSE)[keyof typeof EMBEDDING_PURPOSE];
 
 interface PortfolioSource {
@@ -170,15 +174,10 @@ export class PortfolioRetrievalService {
 
   private async createEmbedding(input: string, purpose: EmbeddingPurpose): Promise<number[] | null> {
     const apiKey = this.configService.get<string>('HUGGINGFACE_API_KEY');
-    const model = this.configService.get<string>('HUGGINGFACE_EMBEDDING_MODEL')
-      ?? 'intfloat/multilingual-e5-small';
-    const apiUrl = this.configService.get<string>('HUGGINGFACE_EMBEDDINGS_URL')
-      ?? `https://api-inference.huggingface.co/pipeline/feature-extraction/${model}`;
-    const dimensions = this.configService.get<number>('HUGGINGFACE_EMBEDDING_DIMENSIONS') ?? 384;
 
     if (!apiKey) return null;
 
-    const response = await fetch(apiUrl, {
+    const response = await fetch(HUGGINGFACE_EMBEDDINGS_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -192,9 +191,9 @@ export class PortfolioRetrievalService {
       throw new Error(`Embedding provider returned ${response.status}: ${detail}`);
     }
 
-    const embedding = this.parseEmbedding(await response.json(), dimensions);
+    const embedding = this.parseEmbedding(await response.json(), HUGGINGFACE_EMBEDDING_DIMENSIONS);
     if (!embedding) {
-      throw new Error(`Embedding provider returned invalid vector dimensions; expected ${dimensions}`);
+      throw new Error(`Embedding provider returned invalid vector dimensions; expected ${HUGGINGFACE_EMBEDDING_DIMENSIONS}`);
     }
 
     return embedding;
