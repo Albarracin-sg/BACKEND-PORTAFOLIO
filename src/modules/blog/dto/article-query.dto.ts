@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export const BLOG_SORT = {
+  DISCOVER: 'discover',
+  RECENT: 'recent',
+} as const;
+
+export type BlogSort = (typeof BLOG_SORT)[keyof typeof BLOG_SORT];
 
 export class ArticleQueryDto {
   @ApiPropertyOptional({ default: 1 })
@@ -26,4 +33,9 @@ export class ArticleQueryDto {
   @IsOptional()
   @IsString()
   projectId?: string;
+
+  @ApiPropertyOptional({ enum: Object.values(BLOG_SORT), default: BLOG_SORT.DISCOVER })
+  @IsOptional()
+  @IsIn(Object.values(BLOG_SORT))
+  sort?: BlogSort = BLOG_SORT.DISCOVER;
 }
